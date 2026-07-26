@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FWY Tools</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://meet.jit.si/external_api.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #1a1512;
+    color: #f0e6d8;
+    margin: 0;
+    min-height: 100vh;
+  }
+  .page { display: none; padding: 20px; max-width: 480px; margin: 0 auto; }
+  .page.active { display: block; }
+
+  nav {
+    display: flex;
+    gap: 6px;
+    padding: 12px 16px;
+    border-bottom: 1px solid #3a3028;
+    flex-wrap: wrap;
+    font-size: 13px;
+  }
+  nav a {
+    color: #d99a4e;
+    text-decoration: none;
+    padding: 4px 8px;
+  }
+  nav a.active { text-decoration: underline; color: #f0e6d8; }
+
+  h1 { font-size: 24px; margin-bottom: 4px; }
+  p.subtitle { color: #a89a89; margin-top: 0; margin-bottom: 24px; font-size: 14px; }
+
+  label {
+    display: block;
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    color: #a89a89;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    margin-top: 14px;
+  }
+  input, textarea {
+    width: 100%;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid #3a3028;
+    background: #241d18;
+    color: #f0e6d8;
+    font-size: 15px;
+    font-family: inherit;
+  }
+  textarea { min-height: 70px; resize: vertical; }
+
+  button {
+    padding: 12px 18px;
+    background: #6b8f5c;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: bold;
+    cursor: pointer;
+    font-size: 15px;
+    margin-top: 16px;
+  }
+  button:disabled { opacity: 0.6; }
+  .btn-secondary { background: none; border: 1px solid #d99a4e; color: #d99a4e; }
+  .btn-danger { background: #b5544a; }
+
+  .msg { margin-top: 12px; font-size: 14px; }
+  .msg.error { color: #e07a5f; }
+  .msg.success { color: #8fbc8f; }
+  a.link { color: #d99a4e; }
+
+  .card {
+    background: #241d18;
+    border: 1px solid #3a3028;
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+  .card h3 { margin: 0 0 4px 0; font-size: 16px; }
+  .card .meta { color: #a89a89; font-size: 13px; margin-bottom: 10px; }
+  .doc-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .doc-link { padding: 6px 12px; border: 1px solid #d99a4e; color: #d99a4e; border-radius: 6px; font-size: 13px; text-decoration: none; }
+  .actions { display: flex; gap: 8px; }
+  .actions button { flex: 1; margin-top: 0; padding: 10px; }
+
+  .status-badge { display: inline-block; padding: 5px 12px; border-radius: 14px; font-size: 12px; font-weight: bold; margin-bottom: 16px; }
+  .status-not_submitted { background: #3a3028; color: #a89a89; }
+  .status-pending { background: #6b5b2a; color: #f0d98a; }
+  .status-approved { background: #2e4a2e; color: #8fbc8f; }
+  .status-rejected { background: #5c2b2b; color: #e07a5f; }
+
+  /* Chat page */
+  #chatMessages { height: 300px; overflow-y: auto; border: 1px solid #3a3028; border-radius: 8px; padding: 10px; margin-bottom: 10px; }
+  .msg-row { margin-bottom: 10px; display: flex; }
+  .msg-row.mine { justify-content: flex-end; }
+  .bubble { max-width: 75%; padding: 8px 12px; border-radius: 12px; font-size: 14px; }
+  .msg-row.mine .bubble { background: #6b8f5c; color: white; }
+  .msg-row.theirs .bubble { background: #241d18; border: 1px solid #3a3028; }
+  .chat-input-row { display: flex; gap: 8px; }
+  .chat-input-row input { flex: 1; }
+  .chat-input-row button { margin-top: 0; }
+
+  #callOverlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: #000;
+    z-index: 200;
+  }
+  #callOverlay.open { display: block; }
+  #jitsiContainer { width: 100%; height: 100%; }
+  #closeCallBtn {
+    position: absolute; top: 10px; right: 10px; z-index: 210;
+    background: #b5544a; color: white; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer;
+  }
+
+  .file-input-wrap { border: 2px dashed #3a3028; border-radius: 8px; padding: 14px; text-align: center; margin-top: 6px; }
+  .filename { font-size: 13px; color: #8fbc8f; margin-top: 6px; }
+  .note { font-size: 12px; color: #a89a89; margin-top: 20px; }
+  .empty { color: #a89a89; padding: 20px 0; }
+</style>
+</head>
+<body>
+
+<nav id="navBar">
+  <a href="#login" data-page="login">Log in</a>
+  <a href="#invite" data-page="invite">Invite Candidate</a>
+  <a href="#chat" data-page="chat">Chat</a>
+  <a href="#verify" data-page="verify">Verify Account</a>
+  <a href="#admin-verify" data-page="admin-verify">Admin Review</a>
+</nav>
+
+<!-- LOGIN PAGE -->
+<div class="page" id="page-login">
+  <h1>Log in</h1>
+  <p class="subtitle">Welcome back to FWY.</p>
+  <form id="loginForm">
+    <label>Email</label>
+    <input type="email" id="loginEmail" required autocomplete="email">
+    <label>Password</label>
+    <input type="password" id="loginPassword" required autocomplete="current-password">
+    <button type="submit" id="loginBtn">Log in</button>
+    <div id="loginMsg" class="msg"></div>
+  </form>
+</div>
+
+<!-- INVITE CANDIDATE PAGE -->
+<div class="page" id="page-invite">
+  <h1>Suggested candidates</h1>
+  <div class="card" data-name="Eggester Zhuway">
+    <h3>Eggester Zhuway</h3>
+    <div class="meta">Cleaner</div>
+    <button onclick="openInviteModal('Eggester Zhuway')">Invite / Message</button>
+  </div>
+
+  <div id="inviteFormWrap" style="display:none; margin-top:16px;">
+    <h3 id="inviteTitle">Invite candidate</h3>
+    <label>Message</label>
+    <textarea id="inviteMessage" placeholder="Hi, we'd love to speak with you..."></textarea>
+    <label>Proposed interview time (optional)</label>
+    <input type="datetime-local" id="inviteTime">
+    <div class="actions">
+      <button class="btn-secondary" onclick="closeInviteModal()">Cancel</button>
+      <button onclick="sendInvite()" id="sendInviteBtn">Send Invite</button>
+    </div>
+    <div id="inviteMsg" class="msg"></div>
+  </div>
+</div>
+
+<!-- CHAT PAGE -->
+<div class="page" id="page-chat">
+  <h1>Chat</h1>
+  <p class="subtitle">Add ?conversation_id=xxx to the URL to open a specific chat.</p>
+  <div style="display:flex; gap:8px; margin-bottom:10px;">
+    <button class="btn-secondary" onclick="startCall(true)">Voice call</button>
+    <button class="btn-secondary" onclick="startCall(false)">Video call</button>
+  </div>
+  <div id="chatMessages"></div>
+  <div class="chat-input-row">
+    <input type="text" id="chatInput" placeholder="Type a message...">
+    <button onclick="sendChatMessage()">Send</button>
+  </div>
+</div>
+
+<!-- VERIFY PAGE -->
+<div class="page" id="page-verify">
+  <h1>Verify your account</h1>
+  <p class="subtitle">Upload your ID and police clearance to get a verified badge.</p>
+  <div id="verifyStatusBadge" class="status-badge status-not_submitted">Not submitted</div>
+  <form id="verifyForm">
+    <label>ID Document (photo)</label>
+    <div class="file-input-wrap">
+      <input type="file" id="idFile" accept="image/*" capture="environment">
+      <div id="idFileName" class="filename"></div>
+    </div>
+    <label>Police Clearance (photo)</label>
+    <div class="file-input-wrap">
+      <input type="file" id="clearanceFile" accept="image/*" capture="environment">
+      <div id="clearanceFileName" class="filename"></div>
+    </div>
+    <button type="submit" id="verifySubmitBtn">Submit for verification</button>
+    <div id="verifyMsg" class="msg"></div>
+  </form>
+  <p class="note">Your documents are private and only visible to FWY admin for review.</p>
+</div>
+
+<!-- ADMIN VERIFY REVIEW PAGE -->
+<div class="page" id="page-admin-verify">
+  <h1>Verification Review</h1>
+  <p class="subtitle">Pending ID and police clearance submissions</p>
+  <div id="adminList">Loading...</div>
+</div>
+
+<!-- Call overlay (shared) -->
+<div id="callOverlay">
+  <button id="closeCallBtn" onclick="endCall()">End Call</button>
+  <div id="jitsiContainer"></div>
+</div>
+
+<script>
+  const SUPABASE_URL = "https://qoqvbawpdvkrggapsmus.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_-PAtGbuLx4sAjJSNuAa01A_T-jB7eYt";
+  const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  // ---------- ROUTING ----------
+  function getConversationId() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("conversation_id");
+  }
+
+  function showPage(pageName) {
+    document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+    document.querySelectorAll("#navBar a").forEach(a => a.classList.remove("active"));
+    const target = document.getElementById("page-" + pageName);
+    if (target) target.classList.add("active");
+    const navLink = document.querySelector('#navBar a[data-page="' + pageName + '"]');
+    if (navLink) navLink.classList.add("active");
+
+    if (pageName === "chat") initChatPage();
+    if (pageName === "verify") initVerifyPage();
+    if (pageName === "admin-verify") initAdminVerifyPage();
+  }
+
+  function route() {
+    const hash = window.location.hash.replace("#", "") || "login";
+    showPage(hash);
+  }
+  window.addEventListener("hashchange", route);
+  window.addEventListener("DOMContentLoaded", route);
+
+
+  // ---------- LOGIN ----------
+  document.getElementById("loginForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const msgEl = document.getElementById("loginMsg");
+    const btn = document.getElementById("loginBtn");
+    msgEl.textContent = "";
+    btn.disabled = true;
+    btn.textContent = "Logging in...";
+
+    const email = document.getElementById("loginEmail").value.trim();
+    const password = document.getElementById("loginPassword").value;
+
+    try {
+      const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      if (error) {
+        msgEl.textContent = error.message;
+        msgEl.className = "msg error";
+      } else {
+        msgEl.textContent = "Logged in!";
+        msgEl.className = "msg success";
+      }
+    } catch (err) {
+      msgEl.textContent = "Error: " + err.message;
+      msgEl.className = "msg error";
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Log in";
+    }
+  });
+
+
+  // ---------- INVITE CANDIDATE ----------
+  let currentCandidateName = null;
+
+  function openInviteModal(name) {
+    currentCandidateName = name;
+    document.getElementById("inviteTitle").textContent = "Invite " + name;
+    document.getElementById("inviteMessage").value = "";
+    document.getElementById("inviteTime").value = "";
+    document.getElementById("inviteMsg").textContent = "";
+    document.getElementById("inviteFormWrap").style.display = "block";
+  }
+  function closeInviteModal() {
+    document.getElementById("inviteFormWrap").style.display = "none";
+  }
+  async function sendInvite() {
+    const msgEl = document.getElementById("inviteMsg");
+    const btn = document.getElementById("sendInviteBtn");
+    const message = document.getElementById("inviteMessage").value.trim();
+    const proposedTime = document.getElementById("inviteTime").value;
+
+    if (!message) {
+      msgEl.textContent = "Please write a message.";
+      msgEl.className = "msg error";
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = "Sending...";
+
+    try {
+      const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+      if (userError || !user) {
+        msgEl.textContent = "You must be logged in to send an invite.";
+        msgEl.className = "msg error";
+        return;
+      }
+      const { error } = await supabaseClient.from("invites").insert({
+        employer_id: user.id,
+        candidate_name: currentCandidateName,
+        message: message,
+        proposed_time: proposedTime ? new Date(proposedTime).toISOString() : null,
+        status: "pending"
+      });
+      if (error) {
+        msgEl.textContent = "Error: " + error.message;
+        msgEl.className = "msg error";
+      } else {
+        msgEl.textContent = "Invite sent!";
+        msgEl.className = "msg success";
+        setTimeout(closeInviteModal, 1200);
+      }
+    } catch (err) {
+      msgEl.textContent = "Error: " + err.message;
+      msgEl.className = "msg error";
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Send Invite";
+    }
+  }
+
+
+  // ---------- CHAT ----------
+  let chatCurrentUserId = null;
+  let chatInitialized = false;
+  let jitsiApi = null;
+
+  async function initChatPage() {
+    if (chatInitialized) return;
+    chatInitialized = true;
+
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) {
+      document.getElementById("chatMessages").innerHTML = "<p>Please log in first.</p>";
+      return;
+    }
+    chatCurrentUserId = user.id;
+
+    const conversationId = getConversationId();
+    if (!conversationId) {
+      document.getElementById("chatMessages").innerHTML = "<p>Add ?conversation_id=xxx to the URL to load a chat.</p>";
+      return;
+    }
+
+    const { data, error } = await supabaseClient
+      .from("messages")
+      .select("*")
+      .eq("conversation_id", conversationId)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      document.getElementById("chatMessages").innerHTML = "<p>Error: " + error.message + "</p>";
+      return;
+    }
+    data.forEach(renderChatMessage);
+
+    supabaseClient
+      .channel("messages-" + conversationId)
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public", table: "messages",
+        filter: "conversation_id=eq." + conversationId
+      }, (payload) => renderChatMessage(payload.new))
+      .subscribe();
+  }
+
+  function renderChatMessage(msg) {
+    const container = document.getElementById("chatMessages");
+    const row = document.createElement("div");
+    row.className = "msg-row " + (msg.sender_id === chatCurrentUserId ? "mine" : "theirs");
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+    bubble.textContent = msg.content;
+    row.appendChild(bubble);
+    container.appendChild(row);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  async function sendChatMessage() {
+    const input = document.getElementById("chatInput");
+    const content = input.value.trim();
+    const conversationId = getConversationId();
+    if (!content || !conversationId) return;
+    input.value = "";
+    const { error } = await supabaseClient.from("messages").insert({
+      conversation_id: conversationId,
+      sender_id: chatCurrentUserId,
+      content: content
+    });
+    if (error) alert("Failed to send: " + error.message);
+  }
+
+  function startCall(audioOnly) {
+    const conversationId = getConversationId();
+    if (!conversationId) { alert("No conversation selected."); return; }
+    const roomName = "fwy-call-" + conversationId;
+    document.getElementById("callOverlay").classList.add("open");
+    jitsiApi = new JitsiMeetExternalAPI("meet.jit.si", {
+      roomName: roomName,
+      parentNode: document.getElementById("jitsiContainer"),
+      width: "100%", height: "100%",
+      configOverwrite: { startWithVideoMuted: audioOnly, startAudioOnly: audioOnly },
+      interfaceConfigOverwrite: { SHOW_JITSI_WATERMARK: false }
+    });
+    jitsiApi.addListener("videoConferenceLeft", endCall);
+  }
+  function endCall() {
+    if (jitsiApi) { jitsiApi.dispose(); jitsiApi = null; }
+    document.getElementById("callOverlay").classList.remove("open");
+  }
+
+
+  // ---------- VERIFY ----------
+  let verifyCurrentUser = null;
+  let verifyInitialized = false;
+
+  document.getElementById("idFile").addEventListener("change", (e) => {
+    document.getElementById("idFileName").textContent = e.target.files[0]?.name || "";
+  });
+  document.getElementById("clearanceFile").addEventListener("change", (e) => {
+    document.getElementById("clearanceFileName").textContent = e.target.files[0]?.name || "";
+  });
+
+  function setVerifyStatusBadge(status) {
+    const badge = document.getElementById("verifyStatusBadge");
+    const labels = {
+      not_submitted: "Not submitted", pending: "Pending review",
+      approved: "Verified ✓", rejected: "Rejected — please resubmit"
+    };
+    badge.className = "status-badge status-" + status;
+    badge.textContent = labels[status] || status;
+  }
+
+  async function initVerifyPage() {
+    if (verifyInitialized) return;
+    verifyInitialized = true;
+
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) return;
+    verifyCurrentUser = user;
+
+    const { data: existing } = await supabaseClient
+      .from("verifications").select("status").eq("user_id", user.id).maybeSingle();
+    if (existing) setVerifyStatusBadge(existing.status);
+  }
+
+  document.getElementById("verifyForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const msgEl = document.getElementById("verifyMsg");
+    const btn = document.getElementById("verifySubmitBtn");
+    const idFile = document.getElementById("idFile").files[0];
+    const clearanceFile = document.getElementById("clearanceFile").files[0];
+
+    if (!verifyCurrentUser) { msgEl.textContent = "Please log in first."; msgEl.className = "msg error"; return; }
+    if (!idFile || !clearanceFile) { msgEl.textContent = "Please select both documents."; msgEl.className = "msg error"; return; }
+
+    btn.disabled = true; btn.textContent = "Uploading..."; msgEl.textContent = "";
+
+    try {
+      const idPath = verifyCurrentUser.id + "/id-" + Date.now() + "-" + idFile.name;
+      const clearancePath = verifyCurrentUser.id + "/clearance-" + Date.now() + "-" + clearanceFile.name;
+
+      let { error: e1 } = await supabaseClient.storage.from("verification-docs").upload(idPath, idFile);
+      if (e1) throw e1;
+      let { error: e2 } = await supabaseClient.storage.from("verification-docs").upload(clearancePath, clearanceFile);
+      if (e2) throw e2;
+
+      const { error: upsertError } = await supabaseClient.from("verifications").upsert({
+        user_id: verifyCurrentUser.id,
+        id_document_path: idPath,
+        police_clearance_path: clearancePath,
+        status: "pending",
+        submitted_at: new Date().toISOString()
+      }, { onConflict: "user_id" });
+      if (upsertError) throw upsertError;
+
+      setVerifyStatusBadge("pending");
+      msgEl.textContent = "Submitted! We'll review your documents soon.";
+      msgEl.className = "msg success";
+    } catch (err) {
+      msgEl.textContent = "Error: " + err.message;
+      msgEl.className = "msg error";
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Submit for verification";
+    }
+  });
+
+
+  // ---------- ADMIN VERIFY REVIEW ----------
+  let adminInitialized = false;
+
+  async function initAdminVerifyPage() {
+    if (adminInitialized) return;
+    adminInitialized = true;
+    const listEl = document.getElementById("adminList");
+
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) { listEl.innerHTML = "<p class='empty'>Please log in.</p>"; return; }
+
+    const { data: adminRow } = await supabaseClient
+      .from("admins").select("user_id").eq("user_id", user.id).maybeSingle();
+    if (!adminRow) { listEl.innerHTML = "<p class='empty'>Access denied — admins only.</p>"; return; }
+
+    const { data: pending, error } = await supabaseClient
+      .from("verifications").select("*").eq("status", "pending").order("submitted_at", { ascending: true });
+
+    if (error) { listEl.innerHTML = "<p class='empty'>Error: " + error.message + "</p>"; return; }
+    if (!pending || pending.length === 0) { listEl.innerHTML = "<p class='empty'>No pending verifications right now.</p>"; return; }
+
+    listEl.innerHTML = "";
+    for (const record of pending) {
+      const card = document.createElement("div");
+      card.className = "card";
+
+      const { data: idUrlData } = await supabaseClient.storage.from("verification-docs").createSignedUrl(record.id_document_path, 3600);
+      const { data: clearanceUrlData } = await supabaseClient.storage.from("verification-docs").createSignedUrl(record.police_clearance_path, 3600);
+
+      card.innerHTML = `
+        <h3>User: ${record.user_id}</h3>
+        <div class="meta">Submitted: ${new Date(record.submitted_at).toLocaleString()}</div>
+        <div class="doc-row">
+          <a class="doc-link" href="${idUrlData?.signedUrl || '#'}" target="_blank">View ID</a>
+          <a class="doc-link" href="${clearanceUrlData?.signedUrl || '#'}" target="_blank">View Police Clearance</a>
+        </div>
+        <div class="actions">
+          <button onclick="reviewRecord('${record.id}', 'approved', this)">Approve</button>
+          <button class="btn-danger" onclick="reviewRecord('${record.id}', 'rejected', this)">Reject</button>
+        </div>
+        <div class="msg" id="note-${record.id}"></div>
+      `;
+      listEl.appendChild(card);
+    }
+  }
+
+  async function reviewRecord(recordId, decision, btnEl) {
+    const noteEl = document.getElementById("note-" + recordId);
+    const card = btnEl.closest(".card");
+    card.querySelectorAll("button").forEach(b => b.disabled = true);
+
+    const { error } = await supabaseClient.from("verifications").update({
+      status: decision, reviewed_at: new Date().toISOString()
+    }).eq("id", recordId);
+
+    if (error) {
+      noteEl.textContent = "Error: " + error.message;
+      noteEl.className = "msg error";
+      card.querySelectorAll("button").forEach(b => b.disabled = false);
+    } else {
+      noteEl.textContent = decision === "approved" ? "Approved ✓" : "Rejected";
+      noteEl.className = "msg success";
+      setTimeout(() => card.remove(), 1000);
+    }
+  }
+</script>
+
+</body>
+</html>
