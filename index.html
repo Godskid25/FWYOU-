@@ -119,6 +119,8 @@ function chatBubbleContent(m) {
 const SUPABASE_KEY = "sb_publishable_-PAtGbuLx4sAjJSNuAa01A_T-jB7eYt";
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const EMAIL_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/send-email-`;
+const PUSH_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/send-push`;
+const VAPID_PUBLIC_KEY = "BJww6wc20yLqC-SKeF-CqmekqfW_ynDWfvL7TJ_xpTRsuBqXPDk0A4hCc8XRlFc2c_hrgE8GXLh8lG_DGWPP1bc";
 
 const MONEY_SERVICES = ["EcoCash", "OneMoney", "Mukuru"];
 const DEPARTMENTS = [
@@ -151,6 +153,7 @@ const state = {
   session: null,
   installPromptAvailable: false,
   installed: false,
+  additionalFeeCtx: null,
   seekerStep: "landing",
   authForm: { email: "", password: "" },
   authError: "",
@@ -335,6 +338,7 @@ async function loadMyProfiles() {
   const uid = state.session.user.id;
   const { data: s } = await sb.from("seekers").select("*").eq("user_id", uid).maybeSingle();
   const { data: e } = await sb.from("employers").select("*").eq("user_id", uid).maybeSingle();
+  subscribeToPush();
   if (s) {
     state.myProfile = s; state.seekerStep = "matches";
     maybeShowOnboarding("seeker");
@@ -876,6 +880,9 @@ function renderSeeker() {
       <button data-action="startCall" data-audio="true" data-room="team-${state.myApplication?.id}">Voice call</button>
       <button data-action="startCall" data-audio="false" data-room="team-${state.myApplication?.id}">Video call</button>
     </div>
+    <div style="padding:0 14px 10px;">
+      <button data-action="requestAdditionalFee" data-ctx="team" style="width:100%;border:1px solid var(--stoneDark);background:#fff;border-radius:10px;padding:8px 10px;font-size:11.5px;color:var(--inkSoft);cursor:pointer;">Request a special favour from admin — $${(state.settings.additional_fee||0).toFixed(2)}</button>
+    </div>
     <div class="chatwrap" style="flex:1;padding:14px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;">
       ${state.teamChatMsgs.length===0 ? `<div style="font-size:12px;color:var(--inkSoft);text-align:center;margin-top:20px;">Your application is in. Say hello to admin.</div>` : ""}
       ${state.teamChatMsgs.map(m => `<div style="align-self:${m.sender_role==='applicant'?'flex-end':'flex-start'};display:flex;align-items:center;gap:6px;max-width:78%;">${m.sender_role==='applicant' ? `<button data-action="deleteMessage" data-id="${esc(m.id||'')}" data-ctx="team" title="Delete" style="background:none;border:none;color:var(--inkSoft);font-size:11px;cursor:pointer;padding:0;">✕</button>` : ""}<div style="background:${m.sender_role==='applicant'?'var(--moss)':'#fff'};color:${m.sender_role==='applicant'?'#fff':'var(--ink)'};border:${m.sender_role==='applicant'?'none':'1px solid var(--stoneDark)'};border-radius:12px;padding:8px 12px;font-size:12.5px;">${chatBubbleContent(m)}</div></div>`).join("")}
@@ -888,6 +895,7 @@ ${state.chatAttachmentUploading ? `<div class="note" style="padding:0 12px;">Upl
       <input id="teamChatInput" placeholder="Message admin..." style="flex:1;border:1px solid var(--stoneDark);border-radius:10px;padding:9px 11px;font-size:12.5px;min-width:0;">
       <button data-action="sendTeamChat" style="background:var(--moss);border:none;border-radius:10px;width:38px;flex-shrink:0;color:#fff;cursor:pointer;">➤</button>
     </div>`;
+  if (st === "additionalFeeBox" && state.additionalFeeCtx === "team") return paymentStep("Additional Fee — Special Favour", state.settings.additional_fee || 0, "var(--moss)", 'data-action="seekerGo" data-step="teamChat"', "confirmAdditionalFeePayment");
   return "";
 }
 
@@ -1227,6 +1235,7 @@ function renderEmployer() {
     <div class="header"><button class="back" data-action="employerGo" data-step="candidates">‹</button><span class="title">FWY Admin${state.myServiceRequest ? " · " + esc(state.myServiceRequest.status||"pending") : ""}</span><button data-action="deleteChatForMe" data-ctx="service" style="background:none;border:1px solid var(--stoneDark);border-radius:8px;font-size:11px;padding:4px 8px;cursor:pointer;">Delete chat</button></div>
     <div style="padding:10px 14px 0;">
       ${state.myServiceRequest && !state.myServiceRequest.paid ? `<button class="btn-outline" style="color:var(--ember);border-color:var(--ember);" data-action="employerGo" data-step="serviceFeeBox">Pay service fee — $${(state.settings.service_request_fee||0).toFixed(2)}</button>` : (state.myServiceRequest?.paid ? `<span class="pill" style="border-color:var(--ember);color:var(--ember);background:rgba(191,107,31,.08);">✓ Fee paid</span>` : "")}
+      <button data-action="requestAdditionalFee" data-ctx="service" style="width:100%;margin-top:8px;border:1px solid var(--stoneDark);background:#fff;border-radius:10px;padding:8px 10px;font-size:11.5px;color:var(--inkSoft);cursor:pointer;">Request a special favour from admin — $${(state.settings.additional_fee||0).toFixed(2)}</button>
     </div>
     <div class="call-row">
       <button data-action="startCall" data-audio="true" data-room="service-${state.myServiceRequest?.id}">Voice call</button>
@@ -1245,6 +1254,7 @@ ${state.chatAttachmentUploading ? `<div class="note" style="padding:0 12px;">Upl
       <button data-action="sendServiceChat" style="background:var(--ember);border:none;border-radius:10px;width:38px;flex-shrink:0;color:#fff;cursor:pointer;">➤</button>
     </div>`;
   if (st === "serviceFeeBox") return paymentStep("Service Request Fee", state.settings.service_request_fee || 0, "var(--ember)", 'data-action="employerGo" data-step="serviceChat"', "confirmServiceFeePayment");
+  if (st === "additionalFeeBox" && state.additionalFeeCtx === "service") return paymentStep("Additional Fee — Special Favour", state.settings.additional_fee || 0, "var(--ember)", 'data-action="employerGo" data-step="serviceChat"', "confirmAdditionalFeePayment");
   return "";
 }
 
@@ -1490,6 +1500,7 @@ ${state.chatAttachmentUploading ? `<div class="note" style="padding:0 12px;">Upl
         <div class="field"><label>INTERVIEW CREDIT ($)</label><input id="price_interview" value="${s.interview_credit_price}"></div>
         <div class="field"><label>SERVICE REQUEST FEE ($)</label><input id="price_service_fee" value="${s.service_request_fee}"></div>
         <div class="field"><label>JOB POSTING FEE ($)</label><input id="price_job_posting" value="${s.job_posting_fee}"></div>
+        <div class="field"><label>ADDITIONAL FEE — SPECIAL FAVOUR ($)</label><input id="price_additional_fee" value="${s.additional_fee}"></div>
         <button class="btn btn-ink" data-action="savePricing">Save pricing</button>
       </div>
       <div class="card">
@@ -1837,6 +1848,7 @@ async function onAction(e) {
     case "cancelPayHelper": state.payingHelper = null; render(); break;
     case "sendPayHelper": await sendPayHelper(); break;
     case "chooseBundle": state.selectedBundle = el.dataset.bundle; state.selectedPaymentMethod = null; if (state.tab === "seeker") state.seekerStep = "paymentConfirm"; else state.employerStep = "paymentConfirm"; render(); break;
+    case "requestAdditionalFee": state.additionalFeeCtx = el.dataset.ctx; state.selectedPaymentMethod = null; if (el.dataset.ctx === "team") state.seekerStep = "additionalFeeBox"; else state.employerStep = "additionalFeeBox"; render(); break;
     case "choosePaymentMethod": state.selectedPaymentMethod = el.dataset.method; render(); break;
     case "backToMethods": state.selectedPaymentMethod = null; render(); break;
     case "confirmSeekerPayment": await confirmSeekerPayment(); break;
@@ -1872,6 +1884,7 @@ async function doAuth(mode, role) {
       if (!roleRow) { state.authError = "This account has no admin role assigned."; await sb.auth.signOut(); render(); return; }
       state.adminSession = data.session; state.adminRole = (roleRow.role || "").trim().toLowerCase();
       await loadAdminLists();
+      subscribeToPush();
     } else {
       if (!data.session) { state.authOtpPending = { email: f.email, role }; state.authOtpCode = ""; state.authOtpError = ""; render(); return; }
       state.session = data.session;
@@ -2059,7 +2072,25 @@ async function sendAdminChat() {
   if (!text || !state.adminOpenChat) return;
   const row = { chat_key: state.adminOpenChat.chatKey, sender_id: state.adminSession.user.id, sender_role: "admin", text };
   const { error } = await sb.from("chat_messages").insert(row);
-  if (!error) { state.adminChatMsgs = [...state.adminChatMsgs, row]; render(); }
+  if (!error) { state.adminChatMsgs = [...state.adminChatMsgs, row]; render(); notifyAdminChatRecipient(text); }
+}
+async function notifyAdminChatRecipient(text) {
+  try {
+    const oc = state.adminOpenChat;
+    if (!oc || !oc.reqId) return;
+    let email = null, userId = null;
+    if (oc.type === "application") {
+      const app = state.adminApplications.find(a => a.id === oc.reqId);
+      email = app && app.contact;
+      userId = app && app.user_id;
+    } else if (oc.type === "request") {
+      const req = state.adminRequests.find(r => r.id === oc.reqId);
+      email = req && req.email;
+      userId = req && req.user_id;
+    }
+    if (email) sendEmailNotification(email, "FWY: new message from admin", text);
+    if (userId) sendPushToUser(userId, "FWY Admin", text);
+  } catch { /* best-effort */ }
 }
 async function respondToRequest(status, message) {
   const reqId = state.adminOpenChat.reqId;
@@ -2069,6 +2100,7 @@ async function respondToRequest(status, message) {
   const { error } = await sb.from("chat_messages").insert(row);
   if (!error) state.adminChatMsgs = [...state.adminChatMsgs, row];
   render();
+  notifyAdminChatRecipient(message);
 }
 async function respondToApplication(status, message) {
   const appId = state.adminOpenChat.reqId;
@@ -2078,6 +2110,7 @@ async function respondToApplication(status, message) {
   const { error } = await sb.from("chat_messages").insert(row);
   if (!error) state.adminChatMsgs = [...state.adminChatMsgs, row];
   render();
+  notifyAdminChatRecipient(message);
 }
 async function sendOffer() {
   const input = document.getElementById("offerInput");
@@ -2090,6 +2123,7 @@ async function sendOffer() {
   const { error } = await sb.from("chat_messages").insert(row);
   if (!error) state.adminChatMsgs = [...state.adminChatMsgs, row];
   render();
+  notifyAdminChatRecipient("Offer: " + text);
 }
 
 async function uploadProfilePhoto(inputId, uid, prefix) {
@@ -2283,6 +2317,19 @@ async function createJobPosting() {
   state.jobPostForm = { title: "", department: "", location: "", pay: "", description: "", poster_path: "", video_path: "" };
   state.employerStep = "jobPostings";
   render();
+  notifyFollowersOfNewJob(mine.id, mine.name, f.title);
+}
+async function notifyFollowersOfNewJob(employerId, employerName, jobTitle) {
+  try {
+    const { data: follows } = await sb.from("follows").select("follower_user_id").eq("followee_type", "employer").eq("followee_id", employerId);
+    if (!follows || follows.length === 0) return;
+    const userIds = follows.map(f => f.follower_user_id);
+    const { data: seekers } = await sb.from("seekers").select("contact").in("user_id", userIds);
+    if (seekers) for (const s of seekers) {
+      if (s.contact) sendEmailNotification(s.contact, "FWY: new job posted", `${employerName || "An employer you follow"} just posted a new job: ${jobTitle}. Open FWY to see it.`);
+    }
+    for (const uid of userIds) sendPushToUser(uid, "FWY: new job posted", `${employerName || "An employer you follow"}: ${jobTitle}`);
+  } catch { /* best-effort, never block job posting */ }
 }
 async function confirmJobPostingFeePayment() {
   const fee = state.settings.job_posting_fee || 0;
@@ -2677,9 +2724,28 @@ async function postAnnouncement() {
   if (!na.title || !na.body) { alert("Add a title and message first."); return; }
   const { error } = await sb.from("announcements").insert({ title: na.title, body: na.body, audience: na.audience, attachment_path: na.attachment_path || null, attachment_type: na.attachment_type || null });
   if (error) { alert("Couldn't post: " + error.message); return; }
+  notifyAudienceOfAnnouncement(na.audience, na.title);
   state.newAnnouncement = { title: "", body: "", audience: "all", attachment_path: "", attachment_type: "" };
   await loadAdminAnnouncements();
   render();
+}
+async function notifyAudienceOfAnnouncement(audience, title) {
+  try {
+    if (audience === "all" || audience === "seeker") {
+      const { data: seekers } = await sb.from("seekers").select("contact, user_id");
+      if (seekers) for (const s of seekers) {
+        if (s.contact) sendEmailNotification(s.contact, "FWY: new community post", `New post in FWY community: ${title}. Open FWY to read it.`);
+        if (s.user_id) sendPushToUser(s.user_id, "FWY community", title);
+      }
+    }
+    if (audience === "all" || audience === "employer") {
+      const { data: employers } = await sb.from("employers").select("email, user_id");
+      if (employers) for (const e of employers) {
+        if (e.email) sendEmailNotification(e.email, "FWY: new community post", `New post in FWY community: ${title}. Open FWY to read it.`);
+        if (e.user_id) sendPushToUser(e.user_id, "FWY community", title);
+      }
+    }
+  } catch { /* best-effort, never block posting */ }
 }
 async function pickAnnouncementMedia(kind) {
   const input = document.createElement("input");
@@ -3039,11 +3105,27 @@ async function sendDirectChat() {
   input.disabled = true;
   const row = { chat_key: state.directChat.chatKey, sender_id: state.session.user.id, sender_role: state.directChat.myRole, text };
   const { data: inserted, error } = await sb.from("chat_messages").insert(row).select().single();
-  if (!error) { state.directChat.msgs = [...state.directChat.msgs, inserted || row]; render(); }
+  if (!error) { state.directChat.msgs = [...state.directChat.msgs, inserted || row]; render(); notifyDirectChatRecipient(text); }
   else { input.value = text; }
   directChatSending = false;
   const freshInput = document.getElementById("directChatInput");
   if (freshInput) freshInput.disabled = false;
+}
+async function notifyDirectChatRecipient(text) {
+  try {
+    const parts = state.directChat.chatKey.split(":"); // direct:employerId:seekerId
+    const employerId = parts[1], seekerId = parts[2];
+    const myRole = state.directChat.myRole;
+    if (myRole === "employer") {
+      const { data: seeker } = await sb.from("seekers").select("contact, user_id").eq("id", seekerId).maybeSingle();
+      if (seeker && seeker.contact) sendEmailNotification(seeker.contact, "FWY: new message", `${state.myProfile?.name || "An employer"} sent you a message: ${text}`);
+      if (seeker && seeker.user_id) sendPushToUser(seeker.user_id, state.myProfile?.name || "New message", text);
+    } else {
+      const { data: employer } = await sb.from("employers").select("email, user_id").eq("id", employerId).maybeSingle();
+      if (employer && employer.email) sendEmailNotification(employer.email, "FWY: new message", `${state.myProfile?.name || "A candidate"} sent you a message: ${text}`);
+      if (employer && employer.user_id) sendPushToUser(employer.user_id, state.myProfile?.name || "New message", text);
+    }
+  } catch { /* best-effort */ }
 }
 
 // ---- WebRTC calling (peer-to-peer, signaled via Supabase Realtime — no third-party call server) ----
@@ -3184,7 +3266,7 @@ async function sendTeamChat() {
   if (!text || !state.myApplication) return;
   const row = { chat_key: `apply:${state.myApplication.id}`, sender_id: state.session.user.id, sender_role: "applicant", text };
   const { error } = await sb.from("chat_messages").insert(row);
-  if (!error) { state.teamChatMsgs = [...state.teamChatMsgs, row]; render(); }
+  if (!error) { state.teamChatMsgs = [...state.teamChatMsgs, row]; render(); sendEmailNotification(state.settings.owner_notify_email, "FWY: new message", `New message from applicant ${state.myApplication.name || ""}: ${text}`); pushAdminTeam("FWY: new message", `${state.myApplication.name || "Applicant"}: ${text}`); }
 }
 
 async function submitServiceRequest() {
@@ -3205,7 +3287,7 @@ async function sendServiceChat() {
   if (!text || !state.myServiceRequest) return;
   const row = { chat_key: `service:${state.myServiceRequest.id}`, sender_id: state.session.user.id, sender_role: "company", text };
   const { error } = await sb.from("chat_messages").insert(row);
-  if (!error) { state.serviceChatMsgs = [...state.serviceChatMsgs, row]; render(); }
+  if (!error) { state.serviceChatMsgs = [...state.serviceChatMsgs, row]; render(); sendEmailNotification(state.settings.owner_notify_email, "FWY: new message", `New message from ${state.myServiceRequest.company || "an employer"}: ${text}`); pushAdminTeam("FWY: new message", `${state.myServiceRequest.company || "An employer"}: ${text}`); }
 }
 
 // ---- Chat attachments: voice notes, photos, documents (shared across all 4 chats) ----
@@ -3326,6 +3408,61 @@ async function sendEmailNotification(to, subject, message) {
     });
   } catch { /* email is best-effort, never block the transaction */ }
 }
+
+// ---- Push notifications (real lock-screen alerts, works even with the app closed) ----
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+async function subscribeToPush() {
+  try {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    const uid = (state.session && state.session.user.id) || (state.adminSession && state.adminSession.user.id);
+    if (!uid) return;
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      if (Notification.permission === "denied") return;
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") return;
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+    }
+    await sb.from("push_subscriptions").upsert(
+      { user_id: uid, subscription: sub.toJSON() },
+      { onConflict: "user_id" }
+    );
+  } catch { /* push is best-effort, never block the app */ }
+}
+async function sendPushToUser(userId, title, body, url) {
+  if (!userId) return;
+  try {
+    await fetch(PUSH_FUNCTION_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_KEY}`, "apikey": SUPABASE_KEY },
+      body: JSON.stringify({ user_id: userId, title, body, url: url || "./index.html" }),
+    });
+  } catch { /* push is best-effort, never block the transaction */ }
+}
+let cachedAdminUserIds = null;
+async function getAdminUserIds() {
+  if (cachedAdminUserIds) return cachedAdminUserIds;
+  try {
+    const { data } = await sb.from("roles").select("user_id").in("role", ["owner", "helper"]);
+    cachedAdminUserIds = (data || []).map(r => r.user_id);
+  } catch { cachedAdminUserIds = []; }
+  return cachedAdminUserIds;
+}
+async function pushAdminTeam(title, body, url) {
+  const ids = await getAdminUserIds();
+  for (const id of ids) sendPushToUser(id, title, body, url);
+}
 async function logActivity(message) {
   const name = state.adminRole === "owner" ? "Owner" : (state.adminHelpers.find(h => h.user_id === state.adminSession.user.id)?.name || "Admin");
   await sb.from("admin_activity").insert({ actor_name: name, message });
@@ -3390,6 +3527,19 @@ async function confirmServiceFeePayment() {
   sendEmailNotification(req.email, "FWY payment received", `We've received your service request fee: $${(state.settings.service_request_fee||0).toFixed(2)}.`);
   sendEmailNotification(state.settings.owner_notify_email, "FWY: payment received", `Service fee — ${req.company} — $${(state.settings.service_request_fee||0).toFixed(2)} received.`);
   state.employerStep = "serviceChat";
+  state.selectedPaymentMethod = null;
+  render();
+}
+async function confirmAdditionalFeePayment() {
+  const ctx = state.additionalFeeCtx;
+  const fee = state.settings.additional_fee || 0;
+  const who = ctx === "team" ? (state.myApplication?.name || "Applicant") : (state.myServiceRequest?.company || "Employer");
+  await logTransaction("Additional Fee", `Special favour requested — ${who}`, fee, "in");
+  const notifyEmail = ctx === "team" ? state.myApplication?.contact : state.myServiceRequest?.email;
+  if (notifyEmail) sendEmailNotification(notifyEmail, "FWY payment received", `We've received your additional fee: $${fee.toFixed(2)}.`);
+  sendEmailNotification(state.settings.owner_notify_email, "FWY: additional fee received", `Additional fee — ${who} — $${fee.toFixed(2)} received.`);
+  if (ctx === "team") state.seekerStep = "teamChat"; else state.employerStep = "serviceChat";
+  state.additionalFeeCtx = null;
   state.selectedPaymentMethod = null;
   render();
 }
@@ -3480,6 +3630,7 @@ async function savePricing() {
     interview_credit_price: g("price_interview", s.interview_credit_price),
     service_request_fee: g("price_service_fee", s.service_request_fee),
     job_posting_fee: g("price_job_posting", s.job_posting_fee),
+    additional_fee: g("price_additional_fee", s.additional_fee),
     platform_cut_percent: g("price_cut", s.platform_cut_percent),
   };
   const { error } = await sb.from("settings").update(updates).eq("id", 1);
