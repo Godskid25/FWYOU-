@@ -120,6 +120,7 @@ const SUPABASE_KEY = "sb_publishable_-PAtGbuLx4sAjJSNuAa01A_T-jB7eYt";
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const EMAIL_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/send-email-`;
 const PUSH_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/send-push`;
+const AI_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/ai-chat`;
 const VAPID_PUBLIC_KEY = "BJww6wc20yLqC-SKeF-CqmekqfW_ynDWfvL7TJ_xpTRsuBqXPDk0A4hCc8XRlFc2c_hrgE8GXLh8lG_DGWPP1bc";
 
 const MONEY_SERVICES = ["EcoCash", "OneMoney", "Mukuru"];
@@ -1940,19 +1941,14 @@ async function toggleAIMatching() {
 }
 
 async function callClaude(systemPrompt, userText) {
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+  const response = await fetch(AI_FUNCTION_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 800,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userText }],
-    }),
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_KEY}`, "apikey": SUPABASE_KEY },
+    body: JSON.stringify({ system: systemPrompt, message: userText }),
   });
   const data = await response.json();
-  const text = (data.content || []).map(b => b.text || "").join("\n").trim();
-  return text;
+  if (!response.ok || data.error) throw new Error(data.error || "AI request failed");
+  return (data.text || "").trim();
 }
 
 async function runAIMatch(role) {
