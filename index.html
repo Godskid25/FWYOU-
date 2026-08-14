@@ -1351,8 +1351,8 @@ ${state.chatAttachmentUploading ? `<div class="note" style="padding:0 12px;">Upl
   }
 
   const tabs = state.adminRole === "owner"
-    ? ["seekers", "employers", "applicants", "requests", "chat", "reports", "incidents", "activity", "money", "books", "settings", "team", "announcements", "topworkers"]
-    : ["seekers", "employers", "applicants", "requests", "chat", "incidents", "activity"];
+    ? ["seekers", "employers", "applicants", "requests", "chat", "ai", "reports", "incidents", "activity", "money", "books", "settings", "team", "announcements", "topworkers"]
+    : ["seekers", "employers", "applicants", "requests", "chat", "ai", "incidents", "activity"];
   let content = "";
   const t = state.adminTab;
   if (t === "seekers") content = state.adminSeekers.length===0 ? `<div style="font-size:12px;color:var(--inkSoft);">None yet.</div>` :
