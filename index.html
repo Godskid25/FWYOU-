@@ -121,6 +121,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const EMAIL_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/send-email-`;
 const PUSH_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/send-push`;
 const AI_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/ai-chat`;
+const DEFAULT_TERMS_CONTENT = "FWYOU — TERMS OF SERVICE\n\n1. WHAT FWYOU IS\nFWYOU connects job seekers with employers in Zimbabwe. We help people find each other — we are not the employer, not the employee, and not a party to any job, contract, or payment arrangement made between users.\n\n2. WHO CAN USE FWYOU\nYou must be between 16 and 65 years old. You must provide accurate information when registering. Accounts are personal/company-specific and may not be shared.\n\n3. WHAT WE DO AND DON'T DO\nWe provide a platform for posting jobs and applying to them, optional ID/police-clearance verification to help build trust, in-app chat and calls, and platform fee processing.\nWe do not guarantee anyone will be hired or find suitable candidates, guarantee the accuracy of user-submitted information, employ or pay job seekers on employers' behalf, or guarantee the safety of any in-person meeting or work arrangement.\n\n4. VERIFICATION BADGES\nA Verification Badge means we reviewed a user's ID and police clearance document and it appeared genuine at the time. It is not a guarantee of that person's future conduct.\n\n5. FEES AND PAYMENTS\nFees are charged as described in the app. Fees are generally non-refundable once a service has been delivered, except where required by law or at our discretion. We are not responsible for wages agreed privately between an employer and a job seeker. If a payment fails or is disputed, contact fwyouzimbabwe@gmail.com.\n\n6. USER CONDUCT\nYou agree not to post false or discriminatory listings, harass or defraud other users, solicit payment for a job that doesn't exist, or upload documents that are not genuinely your own. We may suspend or remove accounts that violate these terms.\n\n7. YOUR INFORMATION\nPersonal information is visible only to FWYOU admin staff and shared with other users only as needed for a match. We take reasonable steps to protect your data but cannot guarantee against all breaches. You can request account/data deletion at fwyouzimbabwe@gmail.com.\n\n8. LIMITATION OF LIABILITY\nFWYOU is not liable for loss, injury, or damage arising from a job or work arrangement made through the app; disputes between employers and job seekers; the accuracy of user-submitted information; or indirect damages from using the app. FWYOU is provided as is.\n\n9. CHANGES\nWe may update these terms; continued use after changes means you accept them.\n\n10. CONTACT\nfwyouzimbabwe@gmail.com\n\n\nFWYOU — SAFETY & DISPUTE POLICY\n\nIF YOU EXPERIENCE A PROBLEM WITH ANOTHER USER\nReport it in-app or at fwyouzimbabwe@gmail.com as soon as possible, with details. We aim to acknowledge every report within 24 hours. For serious reports we review the relevant chat history, may temporarily restrict the reported account, and reach out to both parties. Violations result in account removal. Crimes (assault, theft, threats) should be reported to the Zimbabwe Republic Police directly — we will cooperate with police inquiries where legally required.\n\nIF A DOCUMENT OR PERSONAL DATA IS EVER EXPOSED\nWe will contain the issue as quickly as possible, notify affected users of what was exposed and what we're doing about it as soon as we reasonably can, and document what happened and what we changed to prevent it recurring.\n\nDOMESTIC WORK AND IN-PERSON PLACEMENTS\nWe recommend meeting or interviewing in a public place first when possible, sharing your first day's work details with a friend or family member, and reporting any safety concern immediately, even before a job starts.\n\nPAYMENT DISPUTES\nContact fwyouzimbabwe@gmail.com with your transaction details. Where FWYOU was at fault (double-charge, failed service delivery), we will issue a refund or credit within 5 business days. Wage or salary disputes between an employer and job seeker are a private matter between those two parties; we do not adjudicate or guarantee payment of wages.\n\nThis document is a starting template, not a substitute for professional legal advice.";
 const VAPID_PUBLIC_KEY = "BJww6wc20yLqC-SKeF-CqmekqfW_ynDWfvL7TJ_xpTRsuBqXPDk0A4hCc8XRlFc2c_hrgE8GXLh8lG_DGWPP1bc";
 
 const MONEY_SERVICES = ["EcoCash", "OneMoney", "Mukuru"];
@@ -155,6 +156,15 @@ const state = {
   installPromptAvailable: false,
   installed: false,
   additionalFeeCtx: null,
+  adminInvites: [],
+  adminViewingChat: null,
+  reportsSearch: "",
+  adminIncidents: [],
+  adminSelfName: "",
+  showTerms: false,
+  newIncident: { what: "", affected: "", action: "", changed: "" },
+  notifyForm: { emails: "", subject: "", message: "" },
+  refundForm: { name: "", email: "", amount: "", reason: "" },
   seekerStep: "landing",
   authForm: { email: "", password: "" },
   authError: "",
@@ -380,12 +390,21 @@ async function loadMyProfiles() {
 function render() {
   const el = document.getElementById("screen");
   if (!state.loaded) { el.innerHTML = '<div class="loading">Loading…</div>'; return; }
+  if (state.showTerms) { el.innerHTML = renderTermsViewer(); attachHandlers(); return; }
   let inner = "";
   if (state.tab === "seeker") inner = renderSeeker();
   else if (state.tab === "employer") inner = renderEmployer();
   else inner = renderAdmin();
   el.innerHTML = inner + renderBottomTabs() + renderOnboarding() + renderHelpButton() + renderHelpPanel();
   attachHandlers();
+}
+function renderTermsViewer() {
+  const content = state.settings.terms_content || DEFAULT_TERMS_CONTENT;
+  return `
+    <div class="statusbar"><span>9:41</span><span>FWY</span></div>
+    <div class="header"><button class="back" data-action="closeTerms">‹</button><span class="title">Terms & Safety</span></div>
+    <div style="padding:16px 18px;overflow-y:auto;flex:1;font-size:12.5px;line-height:1.6;white-space:pre-wrap;">${esc(content)}</div>
+  `;
 }
 function renderBottomTabs() {
   const tabs = [["seeker","Find Work"], ["employer","Find Workers"], ["admin","Admin"]];
@@ -527,6 +546,7 @@ function authScreen(role, accent) {
       </button>
     </div>`}
     ${renderInstallButton()}
+    ${!isAdmin ? `<div style="text-align:center;margin-top:12px;"><button data-action="showTerms" style="border:none;background:none;color:var(--inkSoft);font-size:11px;cursor:pointer;text-decoration:underline;">Terms & Safety</button></div>` : ""}
   </div>`;
 }
 function renderInstallButton() {
@@ -1263,6 +1283,25 @@ function renderAdmin() {
   if (!state.adminSession) return authScreen("admin", "var(--ink)");
   const aiEnabled = state.settings.ai_matching_enabled;
 
+  if (state.adminViewingChat) {
+    const vc = state.adminViewingChat;
+    return `
+    <div class="statusbar"><span>9:41</span><span>FWY</span></div>
+    <div class="header"><button class="back" data-action="closeAdminChatReview">‹</button><span class="title">${esc(vc.employerName)} ↔ ${esc(vc.seekerName)}</span></div>
+    <div style="padding:8px 18px 0;font-size:11px;color:var(--inkSoft);">Read-only review — this is a private chat between two users, shown here for safety/dispute review only.</div>
+    <div class="chatwrap" style="flex:1;padding:14px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;">
+      ${vc.loading ? `<div style="font-size:12px;color:var(--inkSoft);text-align:center;margin-top:20px;">Loading…</div>` : ""}
+      ${!vc.loading && vc.msgs.length===0 ? `<div style="font-size:12px;color:var(--inkSoft);text-align:center;margin-top:20px;">No messages in this chat yet.</div>` : ""}
+      ${(vc.msgs||[]).map(m => {
+        const isEmployer = m.sender_role === "employer";
+        return `<div style="align-self:${isEmployer?'flex-end':'flex-start'};max-width:78%;">
+          <div style="font-size:9.5px;color:var(--inkSoft);margin-bottom:2px;${isEmployer?'text-align:right;':''}">${isEmployer ? esc(vc.employerName) : esc(vc.seekerName)} · ${m.created_at ? new Date(m.created_at).toLocaleString() : ""}</div>
+          <div style="background:${isEmployer?'var(--ink)':'#fff'};color:${isEmployer?'#fff':'var(--ink)'};border:${isEmployer?'none':'1px solid var(--stoneDark)'};border-radius:12px;padding:8px 12px;font-size:12.5px;">${chatBubbleContent(m)}</div>
+        </div>`;
+      }).join("")}
+    </div>`;
+  }
+
   if (state.adminOpenChat) {
     const oc = state.adminOpenChat;
     const req = oc.type === "request" ? state.adminRequests.find(r => r.id === oc.reqId) : null;
@@ -1312,8 +1351,8 @@ ${state.chatAttachmentUploading ? `<div class="note" style="padding:0 12px;">Upl
   }
 
   const tabs = state.adminRole === "owner"
-    ? ["seekers", "employers", "applicants", "requests", "chat", "activity", "money", "books", "settings", "team", "announcements", "topworkers"]
-    : ["seekers", "employers", "applicants", "requests", "chat", "activity"];
+    ? ["seekers", "employers", "applicants", "requests", "chat", "reports", "incidents", "activity", "money", "books", "settings", "team", "announcements", "topworkers"]
+    : ["seekers", "employers", "applicants", "requests", "chat", "incidents", "activity"];
   let content = "";
   const t = state.adminTab;
   if (t === "seekers") content = state.adminSeekers.length===0 ? `<div style="font-size:12px;color:var(--inkSoft);">None yet.</div>` :
@@ -1396,6 +1435,65 @@ ${state.chatAttachmentUploading ? `<div class="note" style="padding:0 12px;">Upl
         <button data-action="sendAIChat" style="background:var(--ink);border:none;border-radius:10px;width:38px;color:#fff;cursor:pointer;">➤</button>
       </div>`;
   }
+  else if (t === "reports") {
+    const q = (state.reportsSearch || "").toLowerCase();
+    const list = state.adminInvites.filter(iv =>
+      !q || (iv.employer_name||"").toLowerCase().includes(q) || (iv.seeker_name||"").toLowerCase().includes(q)
+    );
+    content = `
+      <input id="reportsSearchInput" oninput="state.reportsSearch=this.value; render();" placeholder="Search by employer or seeker name..." value="${esc(state.reportsSearch||"")}" style="width:100%;border:1px solid var(--stoneDark);border-radius:10px;padding:9px 11px;font-size:12.5px;margin-bottom:10px;box-sizing:border-box;">
+      <div style="font-size:10.5px;color:var(--inkSoft);margin-bottom:10px;">Every direct chat between an employer and a job seeker. Use this to review a conversation if a report or dispute comes in.</div>
+      ${list.length===0 ? `<div style="font-size:12px;color:var(--inkSoft);">No direct chats yet.</div>` :
+        list.map(iv => `
+        <div class="card" data-action="viewDirectChatAdmin" data-employer-id="${esc(iv.employer_id)}" data-seeker-id="${esc(iv.seeker_id)}" data-employer-name="${esc(iv.employer_name)}" data-seeker-name="${esc(iv.seeker_name)}" style="cursor:pointer;">
+          <div class="card-title">${esc(iv.employer_name)} ↔ ${esc(iv.seeker_name)}</div>
+          <div class="card-sub">${esc((iv.message||"").slice(0,70))}${iv.created_at ? " · " + new Date(iv.created_at).toLocaleDateString() : ""}</div>
+        </div>`).join("")}
+    `;
+  }
+  else if (t === "incidents") {
+    const ni = state.newIncident, nf = state.notifyForm, rf = state.refundForm;
+    content = `
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">Log an incident</div>
+      <div style="font-size:10.5px;color:var(--inkSoft);margin-bottom:8px;">Data exposure, safety report, anything worth a paper trail. Fill this in as soon as you can after handling it.</div>
+      <textarea id="inc_what" placeholder="What happened?" style="width:100%;min-height:50px;border:1px solid var(--stoneDark);border-radius:8px;padding:8px 10px;font-size:12px;margin-bottom:6px;box-sizing:border-box;">${esc(ni.what)}</textarea>
+      <textarea id="inc_affected" placeholder="Who was affected?" style="width:100%;min-height:40px;border:1px solid var(--stoneDark);border-radius:8px;padding:8px 10px;font-size:12px;margin-bottom:6px;box-sizing:border-box;">${esc(ni.affected)}</textarea>
+      <textarea id="inc_action" placeholder="What did you do about it?" style="width:100%;min-height:40px;border:1px solid var(--stoneDark);border-radius:8px;padding:8px 10px;font-size:12px;margin-bottom:6px;box-sizing:border-box;">${esc(ni.action)}</textarea>
+      <textarea id="inc_changed" placeholder="What changed to stop it happening again?" style="width:100%;min-height:40px;border:1px solid var(--stoneDark);border-radius:8px;padding:8px 10px;font-size:12px;margin-bottom:8px;box-sizing:border-box;">${esc(ni.changed)}</textarea>
+      <button data-action="saveIncident" class="btn btn-ember" style="width:100%;margin-bottom:18px;">Save incident</button>
+
+      ${state.adminIncidents.length > 0 ? `
+      <div style="font-size:12px;font-weight:600;margin-bottom:8px;">Past incidents</div>
+      ${state.adminIncidents.map(inc => `
+        <div class="card" style="margin-bottom:8px;">
+          <div class="card-sub" style="margin-bottom:4px;">${inc.created_at ? new Date(inc.created_at).toLocaleString() : ""}${inc.logged_by ? " · " + esc(inc.logged_by) : ""}</div>
+          <div style="font-size:12px;"><b>What:</b> ${esc(inc.what||"")}</div>
+          ${inc.affected ? `<div style="font-size:12px;"><b>Affected:</b> ${esc(inc.affected)}</div>` : ""}
+          ${inc.action ? `<div style="font-size:12px;"><b>Action taken:</b> ${esc(inc.action)}</div>` : ""}
+          ${inc.changed ? `<div style="font-size:12px;"><b>Changed:</b> ${esc(inc.changed)}</div>` : ""}
+        </div>`).join("")}
+      ` : `<div style="font-size:12px;color:var(--inkSoft);margin-bottom:18px;">No incidents logged. Good.</div>`}
+
+      <div style="border-top:1px solid var(--stoneDark);margin:10px 0 18px;"></div>
+
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">Notify affected users</div>
+      <div style="font-size:10.5px;color:var(--inkSoft);margin-bottom:8px;">Paste emails separated by commas, write your message once, send to just that group.</div>
+      <input id="notify_emails" placeholder="email1@x.com, email2@x.com..." value="${esc(nf.emails)}" style="width:100%;border:1px solid var(--stoneDark);border-radius:8px;padding:8px 10px;font-size:12px;margin-bottom:6px;box-sizing:border-box;">
+      <input id="notify_subject" placeholder="Subject" value="${esc(nf.subject)}" style="width:100%;border:1px solid var(--stoneDark);border-radius:8px;padding:8px 10px;font-size:12px;margin-bottom:6px;box-sizing:border-box;">
+      <textarea id="notify_message" placeholder="Message..." style="width:100%;min-height:60px;border:1px solid var(--stoneDark);border-radius:8px;padding:8px 10px;font-size:12px;margin-bottom:8px;box-sizing:border-box;">${esc(nf.message)}</textarea>
+      <button data-action="sendNotifyAffected" class="btn btn-ember" style="width:100%;margin-bottom:18px;">Send notification</button>
+
+      <div style="border-top:1px solid var(--stoneDark);margin:10px 0 18px;"></div>
+
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">Issue refund / credit</div>
+      <div style="font-size:10.5px;color:var(--inkSoft);margin-bottom:8px;">Logs it in the books and emails the user. Sending the actual money back (EcoCash/Paynow) is still done separately by you.</div>
+      <input id="refund_name" placeholder="Their name" value="${esc(rf.name)}" style="width:100%;border:1px solid var(--stoneDark);border-radius:8px;padding:8px 10px;font-size:12px;margin-bottom:6px;box-sizing:border-box;">
+      <input id="refund_email" placeholder="Their email" value="${esc(rf.email)}" style="width:100%;border:1px solid var(--stoneDark);border-radius:8px;padding:8px 10px;font-size:12px;margin-bottom:6px;box-sizing:border-box;">
+      <input id="refund_amount" placeholder="Amount ($)" value="${esc(rf.amount)}" style="width:100%;border:1px solid var(--stoneDark);border-radius:8px;padding:8px 10px;font-size:12px;margin-bottom:6px;box-sizing:border-box;">
+      <input id="refund_reason" placeholder="Reason (double-charge, failed service, etc.)" value="${esc(rf.reason)}" style="width:100%;border:1px solid var(--stoneDark);border-radius:8px;padding:8px 10px;font-size:12px;margin-bottom:8px;box-sizing:border-box;">
+      <button data-action="issueRefund" class="btn btn-ember" style="width:100%;">Issue refund/credit</button>
+    `;
+  }
   else if (t === "activity") content = state.adminActivity.length===0 ? `<div style="font-size:12px;color:var(--inkSoft);">Nothing yet.</div>` :
     state.adminActivity.map(a => `<div class="card"><div style="font-size:12.5px;">${esc(a.message)}</div><div class="card-sub" style="margin-top:2px;">${esc(a.actor_name||"")}</div></div>`).join("");
   else if (t === "money") {
@@ -1403,8 +1501,14 @@ ${state.chatAttachmentUploading ? `<div class="note" style="padding:0 12px;">Upl
       <div class="card">
         <div style="font-size:12.5px;font-weight:600;margin-bottom:4px;">Payment notification email</div>
         <div style="font-size:10.5px;color:var(--inkSoft);margin-bottom:10px;">Where you'll be told about payments received or sent.</div>
-        <div class="field"><label>YOUR EMAIL</label><input id="owner_notify_email" value="${esc(state.settings.owner_notify_email||"")}" placeholder="you@email.com"></div>
+        <div class="field"><label>YOUR EMAIL</label><input id="owner_notify_email" value="${esc(state.settings.owner_notify_email||"fwyouzimbabwe@gmail.com")}" placeholder="you@email.com"></div>
         <button class="btn btn-ink" data-action="saveNotifyEmail">Save</button>
+      </div>
+      <div class="card">
+        <div style="font-size:12.5px;font-weight:600;margin-bottom:4px;">Terms & Safety Policy</div>
+        <div style="font-size:10.5px;color:var(--inkSoft);margin-bottom:10px;">What users see when they tap "Terms & Safety" on the login screen. Edit anytime — changes go live as soon as you save.</div>
+        <textarea id="terms_content" style="width:100%;min-height:220px;border:1px solid var(--stoneDark);border-radius:8px;padding:8px 10px;font-size:11.5px;font-family:inherit;box-sizing:border-box;white-space:pre-wrap;">${esc(state.settings.terms_content || DEFAULT_TERMS_CONTENT)}</textarea>
+        <button class="btn btn-ink" data-action="saveTerms" style="margin-top:8px;">Save Terms & Safety</button>
       </div>
       <div class="card">
         <div style="font-size:12.5px;font-weight:600;margin-bottom:4px;">Add Mukuru</div>
@@ -1709,6 +1813,7 @@ async function onAction(e) {
     readField("money_number", state.moneyForm, "number");
     readField("money_merchant", state.moneyForm, "merchant_id");
     readField("owner_notify_email", state.settings, "owner_notify_email");
+    readField("terms_content", state.settings, "terms_content");
   }
 
   switch (action) {
@@ -1746,6 +1851,24 @@ async function onAction(e) {
     case "cancelAuthOtp": cancelAuthOtp(); break;
     case "toggleAuthMode": state.authMode = state.authMode === "signup" ? "login" : "signup"; state.authError = ""; render(); break;
     case "installApp": await triggerInstallPrompt(); break;
+    case "viewDirectChatAdmin": {
+      const employerId = el.dataset.employerId, seekerId = el.dataset.seekerId;
+      const employerName = el.dataset.employerName, seekerName = el.dataset.seekerName;
+      const chatKey = `direct:${employerId}:${seekerId}`;
+      state.adminViewingChat = { chatKey, employerName, seekerName, msgs: [], loading: true };
+      render();
+      const { data: msgs } = await sb.from("chat_messages").select("*").eq("chat_key", chatKey).order("created_at", { ascending: true });
+      if (state.adminViewingChat && state.adminViewingChat.chatKey === chatKey) {
+        state.adminViewingChat.msgs = msgs || [];
+        state.adminViewingChat.loading = false;
+        render();
+      }
+      break;
+    }
+    case "closeAdminChatReview": state.adminViewingChat = null; render(); break;
+    case "saveIncident": await saveIncident(); break;
+    case "sendNotifyAffected": await sendNotifyAffected(); break;
+    case "issueRefund": await issueRefund(); break;
     case "signOut": await doSignOut(); break;
     case "saveSeekerProfile": await saveSeekerProfile(); break;
     case "toggleTeamStudent": state.teamForm.is_student = !state.teamForm.is_student; render(); break;
@@ -1785,6 +1908,9 @@ async function onAction(e) {
     case "addMukuruAccount": await addMukuruAccount(); break;
     case "addMoneyAccount": await addMoneyAccount(); break;
     case "saveNotifyEmail": await saveNotifyEmail(); break;
+    case "saveTerms": await saveTerms(); break;
+    case "showTerms": state.showTerms = true; if (!state.settings.terms_content) await loadTermsForViewing(); render(); break;
+    case "closeTerms": state.showTerms = false; render(); break;
     case "changeTrial": await changeTrial(parseInt(el.dataset.delta)); break;
     case "savePricing": await savePricing(); break;
     case "removeMoneyAccount": await removeMoneyAccount(el.dataset.id); break;
@@ -1883,7 +2009,7 @@ async function doAuth(mode, role) {
       const { data: roleRow, error: roleSelErr } = await sb.from("roles").select("*").eq("user_id", data.user.id).maybeSingle();
       if (roleSelErr) { state.authError = "Couldn't check your admin role: " + roleSelErr.message; await sb.auth.signOut(); render(); return; }
       if (!roleRow) { state.authError = "This account has no admin role assigned."; await sb.auth.signOut(); render(); return; }
-      state.adminSession = data.session; state.adminRole = (roleRow.role || "").trim().toLowerCase();
+      state.adminSession = data.session; state.adminRole = (roleRow.role || "").trim().toLowerCase(); state.adminSelfName = roleRow.name || "";
       await loadAdminLists();
       subscribeToPush();
     } else {
@@ -1911,7 +2037,7 @@ async function verifyAuthOtp() {
     const { data: roleRow, error: roleSelErr } = await sb.from("roles").select("*").eq("user_id", data.user.id).maybeSingle();
     if (roleSelErr) { state.authOtpError = "Couldn't check your admin role: " + roleSelErr.message; render(); return; }
     if (!roleRow) { state.authOtpError = "This account has no admin role assigned."; await sb.auth.signOut(); render(); return; }
-    state.adminSession = data.session; state.adminRole = (roleRow.role || "").trim().toLowerCase();
+    state.adminSession = data.session; state.adminRole = (roleRow.role || "").trim().toLowerCase(); state.adminSelfName = roleRow.name || "";
     await loadAdminLists();
   } else {
     state.session = data.session;
@@ -1993,6 +2119,10 @@ async function loadAdminLists() {
   const { data: apps } = await sb.from("team_applications").select("*").order("created_at", { ascending: false });
   const { data: reqs } = await sb.from("service_requests").select("*").order("created_at", { ascending: false });
   const { data: activity } = await sb.from("admin_activity").select("*").order("created_at", { ascending: false }).limit(30);
+  const { data: invites } = await sb.from("fwy_invites").select("*").order("created_at", { ascending: false }).limit(200);
+  state.adminInvites = invites || [];
+  const { data: incidents } = await sb.from("incidents").select("*").order("created_at", { ascending: false }).limit(100);
+  state.adminIncidents = incidents || [];
   state.adminSeekers = s || []; state.adminEmployers = e || [];
   state.adminApplications = apps || []; state.adminRequests = reqs || [];
   state.adminActivity = activity || [];
@@ -3394,6 +3524,50 @@ async function toggleVoiceNote(ctx) {
 async function logTransaction(type, description, amount, direction) {
   await sb.from("transactions").insert({ type, description, amount, direction });
 }
+async function saveIncident() {
+  const ni = state.newIncident;
+  readField("inc_what", ni, "what");
+  readField("inc_affected", ni, "affected");
+  readField("inc_action", ni, "action");
+  readField("inc_changed", ni, "changed");
+  if (!ni.what.trim()) { alert("Describe what happened first."); return; }
+  const loggedBy = state.adminRole === "owner" ? (state.adminSelfName || "Owner") : (state.adminSelfName || state.adminHelpers.find(h => h.user_id === state.adminSession.user.id)?.name || "Helper");
+  const { error } = await sb.from("incidents").insert({ what: ni.what, affected: ni.affected, action: ni.action, changed: ni.changed, logged_by: loggedBy });
+  if (error) { alert("Couldn't save: " + error.message); return; }
+  await logActivity(`Logged an incident: ${ni.what.slice(0, 60)}`);
+  state.newIncident = { what: "", affected: "", action: "", changed: "" };
+  await loadAdminLists();
+  render();
+}
+async function sendNotifyAffected() {
+  const nf = state.notifyForm;
+  readField("notify_emails", nf, "emails");
+  readField("notify_subject", nf, "subject");
+  readField("notify_message", nf, "message");
+  const emails = nf.emails.split(",").map(e => e.trim()).filter(Boolean);
+  if (emails.length === 0 || !nf.message.trim()) { alert("Add at least one email and a message."); return; }
+  for (const email of emails) sendEmailNotification(email, nf.subject || "FWY: important notice", nf.message);
+  await logActivity(`Sent a notice to ${emails.length} affected user(s): ${(nf.subject||"").slice(0,60)}`);
+  state.notifyForm = { emails: "", subject: "", message: "" };
+  render();
+  alert(`Sent to ${emails.length} recipient(s).`);
+}
+async function issueRefund() {
+  const rf = state.refundForm;
+  readField("refund_name", rf, "name");
+  readField("refund_email", rf, "email");
+  readField("refund_amount", rf, "amount");
+  readField("refund_reason", rf, "reason");
+  const amt = parseFloat(rf.amount) || 0;
+  if (!amt || !rf.name.trim()) { alert("Enter a name and a valid amount."); return; }
+  await logTransaction("Refund / Credit", `${rf.name}${rf.reason ? " — " + rf.reason : ""}`, amt, "out");
+  await logActivity(`Issued a refund/credit of $${amt.toFixed(2)} to ${rf.name}.`);
+  if (rf.email) sendEmailNotification(rf.email, "FWY: refund issued", `We've issued you a refund/credit of $${amt.toFixed(2)}${rf.reason ? " for: " + rf.reason : ""}. If this was via EcoCash/Paynow, the money will be sent to you separately.`);
+  sendEmailNotification(state.settings.owner_notify_email, "FWY: refund logged", `Refund/credit of $${amt.toFixed(2)} logged for ${rf.name}. Remember to actually send the money via EcoCash/Paynow if you haven't yet.`);
+  state.refundForm = { name: "", email: "", amount: "", reason: "" };
+  render();
+  alert("Refund logged. Don't forget to actually send the money if needed.");
+}
 async function sendEmailNotification(to, subject, message) {
   if (!to) return;
   try {
@@ -3605,6 +3779,18 @@ async function removeMoneyAccount(id) {
 async function saveNotifyEmail() {
   const email = state.settings.owner_notify_email;
   await sb.from("settings").update({ owner_notify_email: email }).eq("id", 1);
+  render();
+}
+async function saveTerms() {
+  const content = state.settings.terms_content || "";
+  const { error } = await sb.from("settings").update({ terms_content: content }).eq("id", 1);
+  if (error) { alert("Couldn't save: " + error.message); return; }
+  render();
+  alert("Terms & Safety updated.");
+}
+async function loadTermsForViewing() {
+  const { data } = await sb.from("settings").select("terms_content").eq("id", 1).maybeSingle();
+  if (data && data.terms_content) state.settings.terms_content = data.terms_content;
   render();
 }
 async function changeTrial(delta) {
