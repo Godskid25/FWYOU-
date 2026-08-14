@@ -1571,6 +1571,7 @@ ${state.chatAttachmentUploading ? `<div class="note" style="padding:0 12px;">Upl
           <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;"><span>${esc(k)}</span><span>${v>=0?'':'-'}$${Math.abs(v).toFixed(2)}</span></div>
         `).join("")}
       </div>
+      <button data-action="askAIAboutBooks" class="btn btn-ink" style="width:100%;margin-top:4px;">Ask AI about the books</button>
 
       <div style="margin-top:12px;">
         ${[...txns].reverse().slice(0,20).map(x => `
@@ -1589,6 +1590,15 @@ ${state.chatAttachmentUploading ? `<div class="note" style="padding:0 12px;">Upl
           <div style="font-family:'Big Shoulders Display',sans-serif;font-weight:700;font-size:26px;min-width:60px;text-align:center;">${s.trial_days ?? 3}d</div>
           <button data-action="changeTrial" data-delta="1" style="width:34px;height:34px;border-radius:50%;border:1px solid var(--stoneDark);background:#fff;cursor:pointer;font-size:16px;">+</button>
         </div>
+      </div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <div style="font-size:12.5px;font-weight:600;margin-bottom:2px;">AI Matching</div>
+            <div style="font-size:10.5px;color:var(--inkSoft);">When on, Matches/Candidates screens use AI-ranked suggestions with a reason for each match, instead of a plain category list.</div>
+          </div>
+        </div>
+        <button data-action="toggleAIMatching" class="btn ${s.ai_matching_enabled ? 'btn-ink' : 'btn-outline'}" style="width:100%;margin-top:10px;">${s.ai_matching_enabled ? "✓ AI Matching is ON — tap to turn off" : "AI Matching is OFF — tap to turn on"}</button>
       </div>
       <div class="card">
         <div style="font-size:12.5px;font-weight:600;margin-bottom:10px;">Subscription pricing</div>
