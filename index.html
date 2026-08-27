@@ -400,7 +400,7 @@ function render() {
   if (state.tab === "seeker") inner = renderSeeker();
   else if (state.tab === "employer") inner = renderEmployer();
   else inner = renderAdmin();
-  el.innerHTML = inner + renderBottomTabs() + renderOnboarding() + renderHelpButton() + renderHelpPanel();
+  el.innerHTML = inner + renderBottomTabs() + renderOnboarding() + renderHelpButton() + renderHelpPanel() + renderEidoBubble();
   attachHandlers();
 }
 function renderTermsViewer() {
@@ -485,11 +485,21 @@ const HELP_CONTENT = {
     { h: "Payment Box", b: "Where you pay your subscription to keep your account active." },
   ],
 };
+function renderEidoBubble() {
+  if (state.onboardOpen || state.helpOpen) return "";
+  if (state.tab !== "seeker" && state.tab !== "employer") return "";
+  if (!state.session) return "";
+  const accent = state.tab === "employer" ? "var(--ember)" : "var(--moss)";
+  return `
+    <button data-action="openEido" style="position:absolute;bottom:52px;right:14px;display:flex;align-items:center;gap:6px;padding:9px 14px 9px 10px;border-radius:20px;border:none;background:${accent};color:#fff;font-size:12px;font-weight:600;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.25);z-index:39;">
+      <span style="font-size:15px;">💬</span> Ask Eido
+    </button>`;
+}
 function renderHelpButton() {
   if (state.onboardOpen) return "";
   if (state.tab !== "seeker" && state.tab !== "employer") return "";
   if (!state.session) return "";
-  return `<button data-action="openHelp" style="position:absolute;top:14px;right:14px;width:26px;height:26px;border-radius:50%;border:1px solid var(--stoneDark);background:rgba(255,255,255,.85);color:var(--ink);font-size:13px;font-weight:700;cursor:pointer;z-index:40;">?</button>`;
+  return `<button data-action="openHelp" style="position:absolute;top:14px;right:14px;padding:5px 12px;border-radius:14px;border:1px solid var(--stoneDark);background:rgba(255,255,255,.85);color:var(--ink);font-size:11.5px;font-weight:700;cursor:pointer;z-index:40;">Help</button>`;
 }
 function renderHelpPanel() {
   if (!state.helpOpen) return "";
@@ -508,6 +518,7 @@ function renderHelpPanel() {
     </div>
     <div style="padding:12px 16px;border-top:1px solid var(--stoneDark);">
       <button data-action="openEido" class="btn" style="width:100%;background:${accent};color:#fff;">💬 Ask Eido — FWY's help assistant</button>
+      <div style="text-align:center;font-size:10px;color:var(--inkSoft);margin-top:6px;">Speaks Shona, Ndebele, Swahili, and other African languages</div>
     </div>
   </div>`;
 }
