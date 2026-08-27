@@ -166,6 +166,7 @@ const state = {
   eidoOpen: false,
   eidoMsgs: [],
   eidoLoading: false,
+  showAdminTab: false,
   newIncident: { what: "", affected: "", action: "", changed: "" },
   notifyForm: { emails: "", subject: "", message: "" },
   refundForm: { name: "", email: "", amount: "", reason: "" },
@@ -327,6 +328,7 @@ async function init() {
   await loadSettings();
   if (session) await loadMyProfiles();
   await loadPublicLists();
+  if (window.location.hash === "#admin") { state.showAdminTab = true; state.tab = "admin"; }
   state.loaded = true;
   render();
 }
@@ -412,7 +414,9 @@ function renderTermsViewer() {
   `;
 }
 function renderBottomTabs() {
-  const tabs = [["seeker","Find Work"], ["employer","Find Workers"], ["admin","Admin"]];
+  const showAdmin = state.showAdminTab || !!state.adminSession;
+  const tabs = [["seeker","Find Work"], ["employer","Find Workers"]];
+  if (showAdmin) tabs.push(["admin","Admin"]);
   return `<div class="bottomtabs">${tabs.map(([id,label]) =>
     `<button data-action="switchTab" data-tab="${id}" class="${state.tab===id?'active':''}">${label}</button>`
   ).join("")}</div>`;
