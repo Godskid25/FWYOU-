@@ -121,6 +121,15 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const EMAIL_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/send-email-`;
 const PUSH_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/send-push`;
 const AI_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/ai-chat`;
+const EIDO_RECOG_LANGS = [
+  { code: "en-US", name: "English" },
+  { code: "en-ZA", name: "English (Southern Africa)" },
+  { code: "pt-PT", name: "Portuguese" },
+  { code: "fr-FR", name: "French" },
+  { code: "sw-KE", name: "Swahili" },
+  { code: "sn-ZW", name: "Shona (experimental)" },
+  { code: "nd-ZW", name: "Ndebele (experimental)" },
+];
 const DEFAULT_TERMS_CONTENT = "FWYOU — TERMS OF SERVICE\n\n1. WHAT FWYOU IS\nFWYOU connects job seekers with employers in Zimbabwe. We help people find each other — we are not the employer, not the employee, and not a party to any job, contract, or payment arrangement made between users.\n\n2. WHO CAN USE FWYOU\nYou must be between 16 and 65 years old. You must provide accurate information when registering. Accounts are personal/company-specific and may not be shared.\n\n3. WHAT WE DO AND DON'T DO\nWe provide a platform for posting jobs and applying to them, optional ID/police-clearance verification to help build trust, in-app chat and calls, and platform fee processing.\nWe do not guarantee anyone will be hired or find suitable candidates, guarantee the accuracy of user-submitted information, employ or pay job seekers on employers' behalf, or guarantee the safety of any in-person meeting or work arrangement.\n\n4. VERIFICATION BADGES\nA Verification Badge means we reviewed a user's ID and police clearance document and it appeared genuine at the time. It is not a guarantee of that person's future conduct.\n\n5. FEES AND PAYMENTS\nFees are charged as described in the app. Fees are generally non-refundable once a service has been delivered, except where required by law or at our discretion. We are not responsible for wages agreed privately between an employer and a job seeker. If a payment fails or is disputed, contact fwyouzimbabwe@gmail.com.\n\n6. USER CONDUCT\nYou agree not to post false or discriminatory listings, harass or defraud other users, solicit payment for a job that doesn't exist, or upload documents that are not genuinely your own. We may suspend or remove accounts that violate these terms.\n\n7. YOUR INFORMATION\nPersonal information is visible only to FWYOU admin staff and shared with other users only as needed for a match. We take reasonable steps to protect your data but cannot guarantee against all breaches. You can request account/data deletion at fwyouzimbabwe@gmail.com.\n\n8. LIMITATION OF LIABILITY\nFWYOU is not liable for loss, injury, or damage arising from a job or work arrangement made through the app; disputes between employers and job seekers; the accuracy of user-submitted information; or indirect damages from using the app. FWYOU is provided as is.\n\n9. CHANGES\nWe may update these terms; continued use after changes means you accept them.\n\n10. CONTACT\nfwyouzimbabwe@gmail.com\n\n\nFWYOU — SAFETY & DISPUTE POLICY\n\nIF YOU EXPERIENCE A PROBLEM WITH ANOTHER USER\nReport it in-app or at fwyouzimbabwe@gmail.com as soon as possible, with details. We aim to acknowledge every report within 24 hours. For serious reports we review the relevant chat history, may temporarily restrict the reported account, and reach out to both parties. Violations result in account removal. Crimes (assault, theft, threats) should be reported to the Zimbabwe Republic Police directly — we will cooperate with police inquiries where legally required.\n\nIF A DOCUMENT OR PERSONAL DATA IS EVER EXPOSED\nWe will contain the issue as quickly as possible, notify affected users of what was exposed and what we're doing about it as soon as we reasonably can, and document what happened and what we changed to prevent it recurring.\n\nDOMESTIC WORK AND IN-PERSON PLACEMENTS\nWe recommend meeting or interviewing in a public place first when possible, sharing your first day's work details with a friend or family member, and reporting any safety concern immediately, even before a job starts.\n\nPAYMENT DISPUTES\nContact fwyouzimbabwe@gmail.com with your transaction details. Where FWYOU was at fault (double-charge, failed service delivery), we will issue a refund or credit within 5 business days. Wage or salary disputes between an employer and job seeker are a private matter between those two parties; we do not adjudicate or guarantee payment of wages.\n\nThis document is a starting template, not a substitute for professional legal advice.";
 const VAPID_PUBLIC_KEY = "BJww6wc20yLqC-SKeF-CqmekqfW_ynDWfvL7TJ_xpTRsuBqXPDk0A4hCc8XRlFc2c_hrgE8GXLh8lG_DGWPP1bc";
 
@@ -166,6 +175,10 @@ const state = {
   eidoOpen: false,
   eidoMsgs: [],
   eidoLoading: false,
+  eidoPendingAttachment: null,
+  eidoSpeakingId: null,
+  eidoListening: false,
+  eidoRecogLang: "en-US",
   showAdminTab: false,
   newIncident: { what: "", affected: "", action: "", changed: "" },
   notifyForm: { emails: "", subject: "", message: "" },
@@ -534,21 +547,43 @@ function renderEidoChat() {
     <div class="header"><button class="back" data-action="closeEido">‹</button><span class="title">Eido</span></div>
     <div style="padding:6px 18px 0;font-size:10.5px;color:var(--inkSoft);">Ask in any language — Shona, Ndebele, Swahili, English, or whatever you're comfortable with.</div>
     <div style="flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;">
-      ${state.eidoMsgs.length === 0 ? `<div style="font-size:12px;color:var(--inkSoft);text-align:center;margin-top:30px;">Hi, I'm Eido. Ask me anything about how FWY works, or tell me if something's gone wrong and I'll pass it to the team.</div>` : ""}
+      ${state.eidoMsgs.length === 0 ? `<div style="font-size:12px;color:var(--inkSoft);text-align:center;margin-top:30px;">Hi, I'm Eido. Ask me anything about how FWY works, send me a photo or file, or tell me if something's gone wrong and I'll pass it to the team.</div>` : ""}
       ${state.eidoMsgs.map(m => `
         <div style="align-self:${m.role==='user'?'flex-end':'flex-start'};max-width:82%;">
-          <div style="background:${m.role==='user'?accent:'#fff'};color:${m.role==='user'?'#fff':'var(--ink)'};border:${m.role==='user'?'none':'1px solid var(--stoneDark)'};border-radius:12px;padding:8px 12px;font-size:12.5px;white-space:pre-wrap;">${esc(m.text)}</div>
+          <div style="background:${m.role==='user'?accent:'#fff'};color:${m.role==='user'?'#fff':'var(--ink)'};border:${m.role==='user'?'none':'1px solid var(--stoneDark)'};border-radius:12px;padding:8px 12px;font-size:12.5px;white-space:pre-wrap;">
+            ${m.imageData ? `<img src="${m.imageData}" style="max-width:100%;border-radius:8px;margin-bottom:${m.text ? '6px' : '0'};display:block;">` : ""}
+            ${m.fileName ? `<div style="font-size:11px;opacity:.85;margin-bottom:${m.text ? '6px' : '0'};">📎 ${esc(m.fileName)}</div>` : ""}
+            ${esc(m.text || "")}
+          </div>
+          <div style="display:flex;gap:10px;margin-top:3px;${m.role==='user'?'justify-content:flex-end;':''}">
+            ${m.role==='assistant' && m.text ? `<button data-action="speakEidoMsg" data-id="${m.id}" style="border:none;background:none;color:var(--inkSoft);font-size:10.5px;cursor:pointer;padding:0;">${state.eidoSpeakingId===m.id ? '⏸ Pause' : '🔊 Play'}</button>` : ""}
+            <button data-action="deleteEidoMsg" data-id="${m.id}" style="border:none;background:none;color:var(--inkSoft);font-size:10.5px;cursor:pointer;padding:0;">🗑 Delete</button>
+          </div>
         </div>`).join("")}
       ${state.eidoLoading ? `<div style="align-self:flex-start;font-size:11.5px;color:var(--inkSoft);">Eido is typing…</div>` : ""}
     </div>
     ${state.eidoMsgs.length > 0 ? `<div style="padding:0 14px 8px;"><button data-action="reportToEido" style="width:100%;border:1px solid var(--stoneDark);background:#fff;border-radius:10px;padding:8px 10px;font-size:11px;color:var(--inkSoft);cursor:pointer;">🚩 Report this to the FWY team</button></div>` : ""}
-    <div style="display:flex;gap:8px;padding:10px 14px 16px;border-top:1px solid var(--stoneDark);">
-      <input id="eidoInput" placeholder="Type your question..." style="flex:1;border:1px solid var(--stoneDark);border-radius:10px;padding:9px 11px;font-size:12.5px;">
-      <button data-action="sendEido" style="background:${accent};border:none;border-radius:10px;width:38px;flex-shrink:0;color:#fff;cursor:pointer;">➤</button>
+    ${state.eidoPendingAttachment ? `
+    <div style="padding:0 14px 8px;display:flex;align-items:center;gap:8px;">
+      ${state.eidoPendingAttachment.imageData ? `<img src="${state.eidoPendingAttachment.imageData}" style="width:36px;height:36px;object-fit:cover;border-radius:6px;">` : `<span style="font-size:11px;">📎 ${esc(state.eidoPendingAttachment.fileName)}</span>`}
+      <button data-action="clearEidoAttachment" style="border:none;background:none;color:var(--inkSoft);font-size:11px;cursor:pointer;">✕ remove</button>
+    </div>` : ""}
+    ${state.eidoListening ? `<div style="padding:0 14px 6px;font-size:11px;color:${accent};">🎙 Listening in ${EIDO_RECOG_LANGS.find(l=>l.code===state.eidoRecogLang)?.name || "English"}… tap the mic again to stop.</div>` : `
+    <div style="padding:0 14px 6px;">
+      <select id="eidoRecogLang" onchange="state.eidoRecogLang=this.value;" style="font-size:10.5px;border:1px solid var(--stoneDark);border-radius:6px;padding:3px 6px;color:var(--inkSoft);background:#fff;">
+        ${EIDO_RECOG_LANGS.map(l => `<option value="${l.code}" ${state.eidoRecogLang===l.code?'selected':''}>🎤 ${l.name}</option>`).join("")}
+      </select>
+    </div>`}
+    <div style="display:flex;gap:6px;padding:10px 14px 16px;border-top:1px solid var(--stoneDark);align-items:center;">
+      <input type="file" id="eidoFileInput" accept="image/*,.pdf,.doc,.docx" style="display:none;">
+      <button data-action="pickEidoAttachment" style="background:none;border:1px solid var(--stoneDark);border-radius:10px;width:36px;height:36px;flex-shrink:0;font-size:15px;cursor:pointer;">📎</button>
+      <button data-action="toggleEidoMic" style="background:${state.eidoListening ? accent : 'none'};border:1px solid var(--stoneDark);border-radius:10px;width:36px;height:36px;flex-shrink:0;font-size:15px;cursor:pointer;color:${state.eidoListening ? '#fff' : 'inherit'};">🎤</button>
+      <input id="eidoInput" placeholder="Type your question..." style="flex:1;border:1px solid var(--stoneDark);border-radius:10px;padding:9px 11px;font-size:12.5px;min-width:0;">
+      <button data-action="sendEido" style="background:${accent};border:none;border-radius:10px;width:38px;height:36px;flex-shrink:0;color:#fff;cursor:pointer;">➤</button>
     </div>`;
 }
 function openEido() { state.eidoOpen = true; state.helpOpen = false; render(); }
-function closeEido() { state.eidoOpen = false; render(); }
+function closeEido() { window.speechSynthesis?.cancel(); state.eidoSpeakingId = null; state.eidoOpen = false; render(); }
 function openHelp() { state.helpOpen = true; render(); }
 function closeHelp() { state.helpOpen = false; render(); }
 
@@ -1789,6 +1824,8 @@ function attachHandlers() {
   if (clearanceFileEl) clearanceFileEl.addEventListener("change", ev => { document.getElementById("clearanceFileName").textContent = ev.target.files[0]?.name || ""; });
   if (sfPhotoEl) sfPhotoEl.addEventListener("change", ev => { document.getElementById("sf_photoName").textContent = ev.target.files[0]?.name || ""; });
   if (efLogoEl) efLogoEl.addEventListener("change", ev => { document.getElementById("ef_logoName").textContent = ev.target.files[0]?.name || ""; });
+  const eidoFileEl = document.getElementById("eidoFileInput");
+  if (eidoFileEl) eidoFileEl.addEventListener("change", ev => handleEidoAttachment(ev.target.files[0]));
 }
 function readField(id, obj, key) {
   const inp = document.getElementById(id);
@@ -1981,6 +2018,11 @@ async function onAction(e) {
     case "closeEido": closeEido(); break;
     case "sendEido": await sendEido(); break;
     case "reportToEido": await reportToEido(); break;
+    case "pickEidoAttachment": document.getElementById("eidoFileInput")?.click(); break;
+    case "clearEidoAttachment": state.eidoPendingAttachment = null; render(); break;
+    case "deleteEidoMsg": state.eidoMsgs = state.eidoMsgs.filter(m => m.id !== el.dataset.id); render(); break;
+    case "speakEidoMsg": speakEidoMsg(el.dataset.id); break;
+    case "toggleEidoMic": toggleEidoMic(); break;
     case "changeTrial": await changeTrial(parseInt(el.dataset.delta)); break;
     case "savePricing": await savePricing(); break;
     case "removeMoneyAccount": await removeMoneyAccount(el.dataset.id); break;
@@ -2136,11 +2178,16 @@ async function toggleAIMatching() {
   render();
 }
 
-async function callClaude(systemPrompt, userText) {
+async function callClaude(systemPrompt, userText, imageData) {
+  const body = { system: systemPrompt, message: userText };
+  if (imageData) {
+    const match = /^data:(.+);base64,(.+)$/.exec(imageData);
+    if (match) body.image = { media_type: match[1], data: match[2] };
+  }
   const response = await fetch(AI_FUNCTION_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_KEY}`, "apikey": SUPABASE_KEY },
-    body: JSON.stringify({ system: systemPrompt, message: userText }),
+    body: JSON.stringify(body),
   });
   const data = await response.json();
   if (!response.ok || data.error) throw new Error(data.error || "AI request failed");
@@ -3877,12 +3924,56 @@ function eidoPublicSystemPrompt() {
     "3) If the person describes a real problem — a bug, a bad experience, a scam, harassment, or a safety concern — be supportive, and let them know they can tap \"Report this to the FWY team\" below the chat so admin can look into it directly. " +
     "4) Keep answers short and conversational, like a helpful person texting back, not a formal document.";
 }
+function makeMsgId() { return Date.now() + "-" + Math.random().toString(36).slice(2, 8); }
+async function handleEidoAttachment(file) {
+  if (!file) return;
+  if (file.size > 8 * 1024 * 1024) { alert("That file is a bit large — please pick one under 8MB."); return; }
+  if (file.type.startsWith("image/")) {
+    const dataUrl = await new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(file); });
+    state.eidoPendingAttachment = { imageData: dataUrl, fileName: file.name, fileType: file.type };
+  } else {
+    state.eidoPendingAttachment = { fileName: file.name, fileType: file.type };
+  }
+  render();
+}
+let eidoRecognizer = null;
+function toggleEidoMic() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { alert("Voice input isn't supported on this browser — please type instead."); return; }
+  if (state.eidoListening) {
+    eidoRecognizer?.stop();
+    return;
+  }
+  eidoRecognizer = new SR();
+  eidoRecognizer.lang = state.eidoRecogLang;
+  eidoRecognizer.interimResults = false;
+  eidoRecognizer.maxAlternatives = 1;
+  eidoRecognizer.onstart = () => { state.eidoListening = true; render(); };
+  eidoRecognizer.onresult = (ev) => {
+    const transcript = ev.results[0][0].transcript;
+    const input = document.getElementById("eidoInput");
+    if (input) input.value = (input.value ? input.value + " " : "") + transcript;
+  };
+  eidoRecognizer.onerror = () => {
+    state.eidoListening = false;
+    render();
+    alert("Couldn't catch that — try again, or switch the language in the dropdown, or just type instead.");
+  };
+  eidoRecognizer.onend = () => { state.eidoListening = false; render(); };
+  try { eidoRecognizer.start(); } catch { state.eidoListening = false; render(); }
+}
 async function sendEido() {
   const input = document.getElementById("eidoInput");
   const text = input && input.value.trim();
-  if (!text || state.eidoLoading) return;
+  const attachment = state.eidoPendingAttachment;
+  if (!text && !attachment) return;
+  if (state.eidoLoading) return;
   input.value = "";
-  state.eidoMsgs = [...state.eidoMsgs, { role: "user", text }];
+  state.eidoPendingAttachment = null;
+  const userMsg = { id: makeMsgId(), role: "user", text };
+  if (attachment?.imageData) userMsg.imageData = attachment.imageData;
+  else if (attachment?.fileName) userMsg.fileName = attachment.fileName;
+  state.eidoMsgs = [...state.eidoMsgs, userMsg];
   state.eidoLoading = true;
   render();
   try {
@@ -3890,12 +3981,36 @@ async function sendEido() {
     const sys = isAdminCtx
       ? `You are Eido, FWY's assistant for admin staff. Help them troubleshoot problems and answer questions about running FWY. [Context: current books: ${booksSummary()}]`
       : eidoPublicSystemPrompt();
-    const reply = await callClaude(sys, text);
-    state.eidoMsgs = [...state.eidoMsgs, { role: "assistant", text: reply || "Sorry, I couldn't get a response just now — please try again." }];
+    let messageForAI = text || "";
+    if (attachment?.fileName && !attachment.imageData) {
+      messageForAI += `\n\n[The user attached a document named "${attachment.fileName}" (${attachment.fileType || "unknown type"}). You cannot open this file directly — kindly ask them to describe what's in it or type the key details if you need to help with it.]`;
+    }
+    const reply = await callClaude(sys, messageForAI, attachment?.imageData);
+    state.eidoMsgs = [...state.eidoMsgs, { id: makeMsgId(), role: "assistant", text: reply || "Sorry, I couldn't get a response just now — please try again." }];
   } catch {
-    state.eidoMsgs = [...state.eidoMsgs, { role: "assistant", text: "Sorry, I'm having trouble responding right now. Please try again in a moment." }];
+    state.eidoMsgs = [...state.eidoMsgs, { id: makeMsgId(), role: "assistant", text: "Sorry, I'm having trouble responding right now. Please try again in a moment." }];
   }
   state.eidoLoading = false;
+  render();
+}
+function speakEidoMsg(id) {
+  if (!("speechSynthesis" in window)) { alert("Read-aloud isn't supported on this browser."); return; }
+  const synth = window.speechSynthesis;
+  if (state.eidoSpeakingId === id) {
+    if (synth.speaking && !synth.paused) { synth.pause(); }
+    else if (synth.paused) { synth.resume(); }
+    else { state.eidoSpeakingId = null; }
+    render();
+    return;
+  }
+  synth.cancel();
+  const msg = state.eidoMsgs.find(m => m.id === id);
+  if (!msg || !msg.text) return;
+  const utterance = new SpeechSynthesisUtterance(msg.text);
+  utterance.onend = () => { state.eidoSpeakingId = null; render(); };
+  utterance.onerror = () => { state.eidoSpeakingId = null; render(); };
+  state.eidoSpeakingId = id;
+  synth.speak(utterance);
   render();
 }
 async function reportToEido() {
