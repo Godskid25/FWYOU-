@@ -232,7 +232,7 @@ const state = {
   myJobPostings: [], jobBoard: [], jobBoardLoading: false,
   jobBoardFilters: { location: "", department: "" },
   myFollowedIds: {}, followingList: [],
-  payday: { profile: null, form: { rent: "", groceries: "", bus_fare: "", data_cost: "" }, calcForm: { hours: "", rate: "" }, logs: [], result: null, saving: false },
+  payday: { profile: null, form: { rent: "", groceries: "", bus_fare: "", data_cost: "" }, calcForm: { period: "hourly", hours: "", rate: "", amount: "" }, logs: [], result: null, saving: false },
   jobPostForm: { title: "", department: "", location: "", pay: "", description: "", poster_path: "", video_path: "" },
   jobApplicants: [], viewingPosting: null,
   posterUploading: false,
@@ -841,7 +841,7 @@ function renderSeeker() {
         <div class="card" style="text-align:center;background:rgba(95,122,104,.06);">
           <div style="font-size:11px;color:var(--inkSoft);">You earned</div>
           <div style="font-family:'IBM Plex Mono',monospace;font-size:32px;font-weight:700;color:var(--moss);margin:4px 0;">$${r.total.toFixed(2)}</div>
-          <div style="font-size:11px;color:var(--inkSoft);">${r.hours} hours × $${r.rate}/hr</div>
+          <div style="font-size:11px;color:var(--inkSoft);">${r.period === "hourly" ? `${r.hours} hours × $${r.rate}/hr` : r.period === "weekly" ? "this week" : "this month"}</div>
         </div>
         ${breakdown.length ? `<div class="card" style="margin-top:10px;"><div style="font-size:11px;font-weight:600;margin-bottom:6px;">That covers:</div>${breakdown.map(b => `<div style="font-size:12.5px;margin-bottom:3px;">✓ ${esc(b)}</div>`).join("")}</div>` : ""}
         ${r.isFirst ? `<div class="note" style="margin-top:10px;">This is your baseline — every future payday will be compared to this one.</div>` :
@@ -858,9 +858,16 @@ function renderSeeker() {
     <div class="header"><button class="back" data-action="seekerGo" data-step="matches">‹</button><span class="title">Payday Calculator</span></div>
     <div class="body">
       <div class="card">
-        <div style="font-size:12.5px;font-weight:600;margin-bottom:8px;">Calculate today's pay</div>
-        <div class="field"><label>HOURS WORKED</label><input id="pd_hours" value="${esc(cf.hours)}" placeholder="8"></div>
-        <div class="field"><label>HOURLY RATE ($)</label><input id="pd_rate" value="${esc(cf.rate)}" placeholder="1.50"></div>
+        <div style="font-size:12.5px;font-weight:600;margin-bottom:8px;">Calculate ${cf.period === "weekly" ? "this week's" : cf.period === "monthly" ? "this month's" : "today's"} pay</div>
+        <div style="display:flex;gap:6px;margin-bottom:10px;">
+          ${["hourly","weekly","monthly"].map(p => `<button data-action="setPaydayPeriod" data-period="${p}" style="flex:1;padding:7px 0;border-radius:8px;border:1px solid var(--stoneDark);background:${cf.period===p?'var(--moss)':'#fff'};color:${cf.period===p?'#fff':'var(--ink)'};font-size:11px;cursor:pointer;text-transform:capitalize;">${p}</button>`).join("")}
+        </div>
+        ${cf.period === "hourly" ? `
+          <div class="field"><label>HOURS WORKED</label><input id="pd_hours" value="${esc(cf.hours)}" placeholder="8"></div>
+          <div class="field"><label>HOURLY RATE ($)</label><input id="pd_rate" value="${esc(cf.rate)}" placeholder="1.50"></div>
+        ` : `
+          <div class="field"><label>${cf.period === "weekly" ? "WEEKLY" : "MONTHLY"} PAY ($)</label><input id="pd_amount" value="${esc(cf.amount)}" placeholder="${cf.period === "weekly" ? "45" : "180"}"></div>
+        `}
         <button class="btn btn-moss" data-action="calculatePay">Calculate</button>
       </div>
       ${pd.logs.length > 0 ? `<div class="note" style="margin:10px 0;">🔥 ${streak}-day streak · ${pd.logs.length} paydays logged</div>` : ""}
@@ -1888,6 +1895,7 @@ async function onAction(e) {
   readField("rate_comment", state.rateForm, "comment");
   readField("pd_hours", state.payday.calcForm, "hours");
   readField("pd_rate", state.payday.calcForm, "rate");
+  readField("pd_amount", state.payday.calcForm, "amount");
   readField("pd_rent", state.payday.form, "rent");
   readField("pd_groceries", state.payday.form, "groceries");
   readField("pd_bus_fare", state.payday.form, "bus_fare");
@@ -2106,6 +2114,7 @@ async function onAction(e) {
     case "deleteMessage": await deleteMessage(el.dataset.id, el.dataset.ctx); break;
     case "startRate": startRate(el.dataset.type, el.dataset.id, el.dataset.chatkey); break;
     case "toggleFollow": await toggleFollow(el.dataset.type, el.dataset.id); break;
+    case "setPaydayPeriod": state.payday.calcForm.period = el.dataset.period; render(); break;
     case "calculatePay": await calculatePay(); break;
     case "savePaydayProfile": await savePaydayProfile(); break;
     case "dismissPaydayResult": dismissPaydayResult(); break;
@@ -3177,12 +3186,20 @@ function paydayBadges(logs, isFirst, beatBaseline) {
 async function calculatePay() {
   const uid = currentAuthId();
   const f = state.payday.calcForm;
-  const hours = Number(f.hours), rate = Number(f.rate);
-  if (!hours || !rate || hours <= 0 || rate <= 0) { alert("Enter your hours worked and hourly rate first."); return; }
-  const total = hours * rate;
+  const period = f.period || "hourly";
+  let total, hours = null, rate = null;
+  if (period === "hourly") {
+    hours = Number(f.hours); rate = Number(f.rate);
+    if (!hours || !rate || hours <= 0 || rate <= 0) { alert("Enter your hours worked and hourly rate first."); return; }
+    total = hours * rate;
+  } else {
+    const amount = Number(f.amount);
+    if (!amount || amount <= 0) { alert(`Enter your ${period} pay amount first.`); return; }
+    total = amount;
+  }
   const isFirst = state.payday.logs.length === 0;
   const baseline = isFirst ? total : (state.payday.profile && state.payday.profile.baseline_pay) || state.payday.logs[state.payday.logs.length - 1]?.total_pay || total;
-  const { data, error } = await sb.from("payday_log").insert({ user_id: uid, hours, rate, total_pay: total }).select().maybeSingle();
+  const { data, error } = await sb.from("payday_log").insert({ user_id: uid, hours, rate, total_pay: total, period }).select().maybeSingle();
   if (error) { alert("Couldn't save this calculation: " + error.message); return; }
   if (isFirst) {
     await sb.from("payday_profile").upsert({ user_id: uid, baseline_pay: total, rent: Number(state.payday.form.rent)||0, groceries: Number(state.payday.form.groceries)||0, bus_fare: Number(state.payday.form.bus_fare)||0, data_cost: Number(state.payday.form.data_cost)||0 }, { onConflict: "user_id" });
@@ -3191,7 +3208,7 @@ async function calculatePay() {
   const p = state.payday.profile || {};
   const beatBaseline = !isFirst && total > (p.baseline_pay || 0);
   state.payday.result = {
-    total, hours, rate, isFirst,
+    total, hours, rate, period, isFirst,
     baseline: p.baseline_pay || total,
     beatBaseline,
     streak: paydayStreak(state.payday.logs),
