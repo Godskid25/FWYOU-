@@ -461,7 +461,7 @@ function render() {
   if (state.tab === "seeker") inner = renderSeeker();
   else if (state.tab === "employer") inner = renderEmployer();
   else inner = renderAdmin();
-  el.innerHTML = inner + renderBottomTabs() + renderOnboarding() + renderHelpButton() + renderHelpPanel() + renderEidoBubble();
+  el.innerHTML = inner + renderBottomTabs() + renderOnboarding() + renderHelpButton() + renderHelpPanel();
   attachHandlers();
 }
 function renderTermsViewer() {
@@ -548,19 +548,7 @@ const HELP_CONTENT = {
     { h: "Payment Box", b: "Where you pay your subscription to keep your account active." },
   ],
 };
-function renderEidoBubble() {
-  if (state.onboardOpen || state.helpOpen) return "";
-  if (state.tab !== "seeker" && state.tab !== "employer") return "";
-  if (!state.session) return "";
-  if (state.directChat) return "";
-  if (state.seekerStep === "teamChat") return "";
-  if (state.employerStep === "serviceChat") return "";
-  const accent = state.tab === "employer" ? "var(--ember)" : "var(--moss)";
-  return `
-    <button data-action="openEido" style="position:absolute;bottom:52px;right:14px;display:flex;align-items:center;gap:6px;padding:9px 14px 9px 10px;border-radius:20px;border:none;background:${accent};color:#fff;font-size:12px;font-weight:600;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.25);z-index:39;">
-      <span style="font-size:15px;">💬</span> Ask Eido
-    </button>`;
-}
+
 function renderHelpButton() {
   if (state.onboardOpen) return "";
   if (state.tab !== "seeker" && state.tab !== "employer") return "";
@@ -806,6 +794,7 @@ function renderSeeker() {
       <button class="btn-outline" style="margin-top:14px;" data-action="seekerGo" data-step="paymentBox">Payment Box</button>
       <button class="btn-outline" style="margin-top:10px;" data-action="seekerGo" data-step="${state.myApplication ? 'teamChat' : 'teamApply'}">${state.myApplication ? 'Message admin about your application' : 'Or apply to work with FWY directly'}${state.myApplication ? unreadBadge(`apply:${state.myApplication.id}`) : ''}</button>
       <button class="btn-outline" style="margin-top:10px;" data-action="signOut">Log out</button>
+      <button data-action="openEido" style="width:100%;margin-top:14px;padding:10px 14px;border-radius:12px;border:none;background:var(--moss);color:#fff;font-size:12.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">💬 Ask Eido</button>
     </div>`;
   }
   if (st === "verifyDocs") {
@@ -1155,6 +1144,7 @@ function renderEmployer() {
       <button class="btn-outline" style="margin-top:14px;color:var(--ember);" data-action="employerGo" data-step="paymentBox">Payment Box</button>
       <button class="btn-outline" style="margin-top:10px;color:var(--ember);" data-action="employerGo" data-step="${state.myServiceRequest ? 'serviceChat' : 'serviceRequest'}">${state.myServiceRequest ? 'Message admin about your service request' : 'Or request a service from us directly'}${state.myServiceRequest ? unreadBadge(`service:${state.myServiceRequest.id}`) : ''}</button>
       <button class="btn-outline" style="margin-top:10px;" data-action="signOut">Log out</button>
+      <button data-action="openEido" style="width:100%;margin-top:14px;padding:10px 14px;border-radius:12px;border:none;background:var(--ember);color:#fff;font-size:12.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">💬 Ask Eido</button>
     </div>`;
   }
   if (st === "paymentBox") {
