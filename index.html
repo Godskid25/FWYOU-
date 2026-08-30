@@ -121,6 +121,8 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const EMAIL_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/send-email-`;
 const PUSH_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/send-push`;
 const AI_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/ai-chat`;
+const PAYNOW_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/paynow-initiate`;
+const PAYNOW_METHOD_MAP = { "EcoCash": "ecocash", "OneMoney": "onemoney", "InnBucks": "innbucks" };
 const EIDO_RECOG_LANGS = [
   { code: "en-US", name: "English" },
   { code: "en-ZA", name: "English (Southern Africa)" },
@@ -179,6 +181,13 @@ const state = {
   eidoSpeakingId: null,
   eidoListening: false,
   eidoRecogLang: "en-US",
+  paynowStatus: null,
+  paynowError: "",
+  paynowPhone: "",
+  paynowInstructions: null,
+  paynowAuthCode: null,
+  paynowAuthExpires: null,
+  paynowPollUrl: null,
   showAdminTab: false,
   newIncident: { what: "", affected: "", action: "", changed: "" },
   notifyForm: { emails: "", subject: "", message: "" },
@@ -319,16 +328,54 @@ function paymentStep(name, price, accent, backAction, confirmAction) {
         </div>`).join("")}
     </div>`;
   }
-  const isBank = state.selectedPaymentMethod === "Bank Transfer";
+  const method = state.selectedPaymentMethod;
+  const isBank = method === "Bank Transfer";
+  const paynowMethod = PAYNOW_METHOD_MAP[method];
+  const needsPhone = paynowMethod === "ecocash" || paynowMethod === "onemoney";
+
+  // Real Paynow flow (EcoCash, OneMoney, InnBucks)
+  if (paynowMethod) {
+    return `
+    <div class="statusbar"><span>9:41</span><span>FWY</span></div>
+    <div class="header"><button class="back" data-action="backToMethods">‹</button><span class="title">Confirm payment</span></div>
+    <div class="body" style="display:flex;flex-direction:column;align-items:center;text-align:center;padding-top:24px;">
+      <div style="font-family:'Big Shoulders Display',sans-serif;font-weight:700;font-size:20px;">${esc(name)}</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:24px;margin:10px 0 6px;">$${price.toFixed(2)}</div>
+      <div class="pill" style="margin-bottom:16px;">via ${esc(method)}</div>
+
+      ${state.paynowStatus === "error" ? `<div style="color:#b3432b;font-size:12px;margin-bottom:14px;max-width:260px;">${esc(state.paynowError)}</div>` : ""}
+
+      ${state.paynowStatus === "waiting" ? `
+        <div style="font-size:12.5px;color:var(--inkSoft);margin-bottom:10px;max-width:260px;line-height:1.6;">
+          ${state.paynowInstructions ? esc(state.paynowInstructions) : (paynowMethod === "innbucks" ? "Open your InnBucks app and enter the code below to complete payment." : `Check your phone — approve the ${esc(method)} prompt with your PIN.`)}
+        </div>
+        ${state.paynowAuthCode ? `<div style="font-family:'IBM Plex Mono',monospace;font-size:22px;letter-spacing:2px;margin-bottom:6px;">${esc(state.paynowAuthCode)}</div>${state.paynowAuthExpires ? `<div style="font-size:10.5px;color:var(--inkSoft);margin-bottom:16px;">Expires ${esc(state.paynowAuthExpires)}</div>` : ""}` : ""}
+        <div style="font-size:12px;color:var(--inkSoft);margin:14px 0;">⏳ Waiting for payment confirmation…</div>
+        <button class="btn-outline" data-action="cancelPaynowWait" style="width:100%;">Cancel</button>
+      ` : `
+        <div style="font-size:12px;color:var(--inkSoft);margin-bottom:20px;line-height:1.6;max-width:250px;">
+          ${needsPhone ? `Enter your ${esc(method)} number — we'll send a payment prompt straight to it.` : `You'll get a code to enter in your InnBucks app to complete this payment.`}
+        </div>
+        ${needsPhone ? `<input id="paynowPhone" placeholder="e.g. 0771234567" value="${esc(state.paynowPhone||"")}" style="width:100%;border:1px solid var(--stoneDark);border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:16px;box-sizing:border-box;text-align:center;">` : ""}
+        <div style="width:100%;">
+          <button class="btn" style="background:${accent};" data-action="startRealPayment" data-amount="${price}" data-desc="${esc(name)}" data-confirm="${confirmAction}" data-method="${paynowMethod}" ${state.paynowStatus === "initiating" ? "disabled" : ""}>
+            ${state.paynowStatus === "initiating" ? "Starting…" : `Pay $${price.toFixed(2)} via ${esc(method)}`}
+          </button>
+        </div>
+      `}
+    </div>`;
+  }
+
+  // Bank transfer keeps the existing manual/off-app flow.
   return `
     <div class="statusbar"><span>9:41</span><span>FWY</span></div>
     <div class="header"><button class="back" data-action="backToMethods">‹</button><span class="title">Confirm payment</span></div>
     <div class="body" style="display:flex;flex-direction:column;align-items:center;text-align:center;padding-top:24px;">
       <div style="font-family:'Big Shoulders Display',sans-serif;font-weight:700;font-size:20px;">${esc(name)}</div>
       <div style="font-family:'IBM Plex Mono',monospace;font-size:24px;margin:10px 0 6px;">$${price.toFixed(2)}</div>
-      <div class="pill" style="margin-bottom:16px;">via ${esc(state.selectedPaymentMethod)}</div>
+      <div class="pill" style="margin-bottom:16px;">via ${esc(method)}</div>
       <div style="font-size:12px;color:var(--inkSoft);margin-bottom:24px;line-height:1.6;max-width:250px;">
-        ${isBank ? `You'll be given bank details to complete the transfer securely — never inside FWY.` : `We'll send a payment prompt to your ${esc(state.selectedPaymentMethod)} number. Enter your PIN there — never inside FWY.`}
+        ${isBank ? `You'll be given bank details to complete the transfer securely — never inside FWY.` : `We'll send a payment prompt to your ${esc(method)} number. Enter your PIN there — never inside FWY.`}
       </div>
       <div style="width:100%;"><button class="btn" style="background:${accent};" data-action="${confirmAction}">Simulate: payment confirmed</button></div>
     </div>`;
@@ -2093,8 +2140,10 @@ async function onAction(e) {
     case "sendPayHelper": await sendPayHelper(); break;
     case "chooseBundle": state.selectedBundle = el.dataset.bundle; state.selectedPaymentMethod = null; if (state.tab === "seeker") state.seekerStep = "paymentConfirm"; else state.employerStep = "paymentConfirm"; render(); break;
     case "requestAdditionalFee": state.additionalFeeCtx = el.dataset.ctx; state.selectedPaymentMethod = null; if (el.dataset.ctx === "team") state.seekerStep = "additionalFeeBox"; else state.employerStep = "additionalFeeBox"; render(); break;
-    case "choosePaymentMethod": state.selectedPaymentMethod = el.dataset.method; render(); break;
-    case "backToMethods": state.selectedPaymentMethod = null; render(); break;
+    case "choosePaymentMethod": state.selectedPaymentMethod = el.dataset.method; resetPaynowState(); render(); break;
+    case "backToMethods": state.selectedPaymentMethod = null; resetPaynowState(); render(); break;
+    case "startRealPayment": await startRealPayment(el.dataset.amount, el.dataset.desc, el.dataset.confirm, el.dataset.method); break;
+    case "cancelPaynowWait": stopPaynowPolling(); resetPaynowState(); render(); break;
     case "confirmSeekerPayment": await confirmSeekerPayment(); break;
     case "confirmEmployerPayment": await confirmEmployerPayment(); break;
     case "confirmServiceFeePayment": await confirmServiceFeePayment(); break;
@@ -3645,6 +3694,95 @@ async function toggleVoiceNote(ctx) {
   }
 }
 
+function resetPaynowState() {
+  state.paynowStatus = null;
+  state.paynowError = "";
+  state.paynowInstructions = null;
+  state.paynowAuthCode = null;
+  state.paynowAuthExpires = null;
+  state.paynowPollUrl = null;
+}
+let paynowPollTimer = null;
+let paynowPollAttempts = 0;
+function stopPaynowPolling() {
+  if (paynowPollTimer) { clearInterval(paynowPollTimer); paynowPollTimer = null; }
+  paynowPollAttempts = 0;
+}
+async function startRealPayment(amountStr, description, confirmAction, method) {
+  const amount = parseFloat(amountStr);
+  let phone = "";
+  if (method === "ecocash" || method === "onemoney") {
+    const phoneInput = document.getElementById("paynowPhone");
+    phone = (phoneInput?.value || "").trim();
+    if (!phone) { alert("Please enter your phone number first."); return; }
+    state.paynowPhone = phone;
+  }
+  state.paynowStatus = "initiating";
+  state.paynowError = "";
+  render();
+  try {
+    const email = state.session?.user?.email || state.myProfile?.contact || state.myProfile?.email || "noreply@fwyou.com";
+    const reference = "FWY-" + Date.now();
+    const res = await fetch(PAYNOW_FUNCTION_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_KEY}`, "apikey": SUPABASE_KEY },
+      body: JSON.stringify({ action: "initiate", amount, reference, description, email, phone: phone || undefined, method }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      state.paynowStatus = "error";
+      state.paynowError = data.error || "Couldn't start the payment — please try again.";
+      render();
+      return;
+    }
+    state.paynowInstructions = data.instructions;
+    state.paynowAuthCode = data.authorizationCode;
+    state.paynowAuthExpires = data.authorizationExpires;
+    state.paynowPollUrl = data.pollUrl;
+    state.paynowStatus = "waiting";
+    render();
+    if (data.pollUrl) startPaynowPolling(data.pollUrl, confirmAction);
+  } catch {
+    state.paynowStatus = "error";
+    state.paynowError = "Couldn't reach the payment service — check your connection and try again.";
+    render();
+  }
+}
+function startPaynowPolling(pollUrl, confirmAction) {
+  stopPaynowPolling();
+  paynowPollAttempts = 0;
+  paynowPollTimer = setInterval(async () => {
+    paynowPollAttempts++;
+    if (paynowPollAttempts > 30) { // ~2 minutes at 4s intervals
+      stopPaynowPolling();
+      state.paynowStatus = "error";
+      state.paynowError = "This is taking longer than expected. If you already approved it, check back shortly — otherwise try again.";
+      render();
+      return;
+    }
+    try {
+      const res = await fetch(PAYNOW_FUNCTION_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_KEY}`, "apikey": SUPABASE_KEY },
+        body: JSON.stringify({ action: "poll", pollUrl }),
+      });
+      const data = await res.json();
+      if (data.paid) {
+        stopPaynowPolling();
+        resetPaynowState();
+        state.selectedPaymentMethod = null;
+        render();
+        if (typeof window[confirmAction] === "function") await window[confirmAction]();
+      } else if (["cancelled", "failed", "disputed"].includes(data.status)) {
+        stopPaynowPolling();
+        state.paynowStatus = "error";
+        state.paynowError = "The payment wasn't completed — you can try again.";
+        render();
+      }
+      // otherwise still pending ("created"/"sent") — keep polling
+    } catch { /* keep polling despite a transient network error */ }
+  }, 4000);
+}
 async function logTransaction(type, description, amount, direction) {
   await sb.from("transactions").insert({ type, description, amount, direction });
 }
