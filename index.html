@@ -2230,7 +2230,8 @@ function cancelAuthOtp() {
 async function toggleAIMatching() {
   const next = !state.settings.ai_matching_enabled;
   const { error } = await sb.from("settings").update({ ai_matching_enabled: next }).eq("id", 1);
-  if (!error) state.settings.ai_matching_enabled = next;
+  if (error) { alert("Couldn't save: " + error.message); return; }
+  state.settings.ai_matching_enabled = next;
   render();
 }
 
@@ -4209,7 +4210,8 @@ async function reportToEido() {
 async function changeTrial(delta) {
   const next = Math.max(0, (state.settings.trial_days ?? 3) + delta);
   const { error } = await sb.from("settings").update({ trial_days: next }).eq("id", 1);
-  if (!error) state.settings.trial_days = next;
+  if (error) { alert("Couldn't save: " + error.message); return; }
+  state.settings.trial_days = next;
   render();
 }
 async function savePricing() {
@@ -4229,7 +4231,8 @@ async function savePricing() {
     platform_cut_percent: g("price_cut", s.platform_cut_percent),
   };
   const { error } = await sb.from("settings").update(updates).eq("id", 1);
-  if (!error) state.settings = { ...state.settings, ...updates };
+  if (error) { alert("Couldn't save pricing: " + error.message); return; }
+  state.settings = { ...state.settings, ...updates };
   render();
 }
 
