@@ -2426,7 +2426,7 @@ async function sendAdminChat() {
   const row = { chat_key: state.adminOpenChat.chatKey, sender_id: state.adminSession.user.id, sender_role: "admin", text };
   const { error } = await sb.from("chat_messages").insert(row);
   if (error) { alert("Message didn't send: " + error.message); return; }
-  state.adminChatMsgs = [...state.adminChatMsgs, row]; render(); notifyAdminChatRecipient(text);
+  state.adminChatMsgs = [...state.adminChatMsgs, row]; renderKeepScroll(); notifyAdminChatRecipient(text);
 }
 async function notifyAdminChatRecipient(text) {
   try {
@@ -2454,7 +2454,7 @@ async function respondToRequest(status, message) {
   const { error } = await sb.from("chat_messages").insert(row);
   if (error) alert("Status updated, but the message didn't send: " + error.message);
   else state.adminChatMsgs = [...state.adminChatMsgs, row];
-  render();
+  renderKeepScroll();
   notifyAdminChatRecipient(message);
 }
 async function respondToApplication(status, message) {
@@ -2465,7 +2465,7 @@ async function respondToApplication(status, message) {
   const { error } = await sb.from("chat_messages").insert(row);
   if (error) alert("Status updated, but the message didn't send: " + error.message);
   else state.adminChatMsgs = [...state.adminChatMsgs, row];
-  render();
+  renderKeepScroll();
   notifyAdminChatRecipient(message);
 }
 async function sendOffer() {
@@ -2479,7 +2479,7 @@ async function sendOffer() {
   const { error } = await sb.from("chat_messages").insert(row);
   if (error) alert("Status updated, but the offer message didn't send: " + error.message);
   else state.adminChatMsgs = [...state.adminChatMsgs, row];
-  render();
+  renderKeepScroll();
   notifyAdminChatRecipient("Offer: " + text);
 }
 
@@ -3470,7 +3470,7 @@ async function sendDirectChat() {
   input.disabled = true;
   const row = { chat_key: state.directChat.chatKey, sender_id: state.session.user.id, sender_role: state.directChat.myRole, text };
   const { data: inserted, error } = await sb.from("chat_messages").insert(row).select().single();
-  if (!error) { state.directChat.msgs = [...state.directChat.msgs, inserted || row]; render(); notifyDirectChatRecipient(text); }
+  if (!error) { state.directChat.msgs = [...state.directChat.msgs, inserted || row]; renderKeepScroll(); notifyDirectChatRecipient(text); }
   else { input.value = text; alert("Message didn't send: " + error.message); }
   directChatSending = false;
   const freshInput = document.getElementById("directChatInput");
@@ -3635,7 +3635,8 @@ async function sendTeamChat() {
   const row = { chat_key: `apply:${state.myApplication.id}`, sender_id: state.session.user.id, sender_role: "applicant", text };
   const { error } = await sb.from("chat_messages").insert(row);
   if (error) { alert("Message didn't send: " + error.message); return; }
-  state.teamChatMsgs = [...state.teamChatMsgs, row]; render(); sendEmailNotification(state.settings.owner_notify_email, "FWY: new message", `New message from applicant ${state.myApplication.name || ""}: ${text}`); pushAdminTeam("FWY: new message", `${state.myApplication.name || "Applicant"}: ${text}`);
+  input.value = "";
+  state.teamChatMsgs = [...state.teamChatMsgs, row]; renderKeepScroll(); sendEmailNotification(state.settings.owner_notify_email, "FWY: new message", `New message from applicant ${state.myApplication.name || ""}: ${text}`); pushAdminTeam("FWY: new message", `${state.myApplication.name || "Applicant"}: ${text}`);
 }
 
 async function submitServiceRequest() {
@@ -3657,7 +3658,8 @@ async function sendServiceChat() {
   const row = { chat_key: `service:${state.myServiceRequest.id}`, sender_id: state.session.user.id, sender_role: "company", text };
   const { error } = await sb.from("chat_messages").insert(row);
   if (error) { alert("Message didn't send: " + error.message); return; }
-  state.serviceChatMsgs = [...state.serviceChatMsgs, row]; render(); sendEmailNotification(state.settings.owner_notify_email, "FWY: new message", `New message from ${state.myServiceRequest.company || "an employer"}: ${text}`); pushAdminTeam("FWY: new message", `${state.myServiceRequest.company || "An employer"}: ${text}`);
+  input.value = "";
+  state.serviceChatMsgs = [...state.serviceChatMsgs, row]; renderKeepScroll(); sendEmailNotification(state.settings.owner_notify_email, "FWY: new message", `New message from ${state.myServiceRequest.company || "an employer"}: ${text}`); pushAdminTeam("FWY: new message", `${state.myServiceRequest.company || "An employer"}: ${text}`);
 }
 
 // ---- Chat attachments: voice notes, photos, documents (shared across all 4 chats) ----
