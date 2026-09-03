@@ -38,6 +38,9 @@
   .btn{width:100%;padding:12px 16px;border-radius:12px;border:none;font-weight:600;font-size:14px;cursor:pointer;color:#fff;}
   .btn-moss{background:var(--moss);} .btn-ember{background:var(--ember);} .btn-ink{background:var(--ink);}
   .btn-outline{background:none;border:1px solid var(--inkSoft);color:var(--inkSoft);text-decoration:underline;font-size:12px;padding:4px;}
+  .hscroll-tabs{display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:10px;margin-bottom:8px;scroll-snap-type:x proximity;}
+  .hscroll-tabs::-webkit-scrollbar{display:none;}
+  .hscroll-tabs .btn-outline{flex-shrink:0;white-space:nowrap;scroll-snap-align:start;}
   .card{border:1px solid var(--stoneDark);border-radius:12px;padding:13px;margin-bottom:9px;background:#fff;}
   .card-title{font-size:13px;font-weight:600;} .card-sub{font-size:11.5px;color:var(--inkSoft);}
   .err{font-size:11px;color:var(--red);margin:-4px 0 10px;}
@@ -778,17 +781,16 @@ function renderSeeker() {
     <div class="statusbar"><span>9:41</span><span>FWY</span></div>
     <div class="header"><span class="title">Matches for you</span></div>
     <div class="body">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px;">
-        <span class="pill">${esc(mine?.category||"")}</span>
-        <div style="display:flex;gap:6px;">
+      <div style="margin-bottom:8px;"><span class="pill">${esc(mine?.category||"")}</span></div>
+      <div class="hscroll-tabs">
           <button class="btn-outline" data-action="seekerGo" data-step="jobBoard">Job postings</button>
+          <button class="btn-outline" data-action="seekerGo" data-step="myApplications">My applications${state.myApplications.length ? ` (${state.myApplications.length})` : ""}</button>
           <button class="btn-outline" data-action="seekerGo" data-step="myReviews">My reviews</button>
           <button class="btn-outline" data-action="seekerGo" data-step="workHistory">Work history</button>
           <button class="btn-outline" data-action="seekerGo" data-step="community">Community</button>
           <button class="btn-outline" data-action="seekerGo" data-step="payday">Payday Calc</button>
           <button class="btn-outline" data-action="seekerGo" data-step="following">Following</button>
           <button class="btn-outline" data-action="seekerGo" data-step="profile">Edit profile</button>
-        </div>
       </div>
       ${mine?.verified ? `<div style="margin-bottom:10px;"><span class="pill" style="border-color:var(--ember);color:var(--ember);background:rgba(191,107,31,.08);">✓ Verified</span> ${mine?.boosted ? `<span class="pill">★ Boosted</span>` : ""}</div>` :
         (mine?.verification_pending ? `<div style="margin-bottom:10px;">
@@ -803,8 +805,19 @@ function renderSeeker() {
       ${state.aiMatchError ? `<div style="font-size:11px;color:var(--red);margin-bottom:10px;">${esc(state.aiMatchError)}</div>` : ""}
       ${!state.aiMatchLoading && list.length===0 ? `<div style="font-size:12.5px;color:var(--inkSoft);">No employers posted in your category yet.</div>` : ""}
       ${!state.aiMatchLoading ? list.map(e => `<div class="card" style="display:flex;gap:10px;align-items:flex-start;"><div style="flex:1;">${e.logo_path ? `<img src="${SUPABASE_URL}/storage/v1/object/public/profile-photos/${esc(e.logo_path)}" style="width:38px;height:38px;border-radius:8px;object-fit:cover;float:left;margin-right:8px;">` : ""}<div class="card-title">${esc(e.name)}${ratingBadge(e.id)}${topRatedBadge(e.id)}${followButton("employer", e.id)}</div><div class="card-sub">${esc(e.what_do)}</div>${e.aiReason ? `<div style="font-size:11px;color:var(--moss);margin-top:4px;">${esc(e.aiReason)}</div>` : ""}${e.id ? `<button class="btn-outline" style="margin-top:8px;color:var(--moss);clear:both;" data-action="startApply" data-id="${esc(e.id)}" data-name="${esc(e.name)}">Apply</button>` : ""}</div></div>`).join("") : ""}
+      <button class="btn-outline" style="margin-top:14px;" data-action="seekerGo" data-step="paymentBox">Payment Box</button>
+      <button class="btn-outline" style="margin-top:10px;" data-action="seekerGo" data-step="${state.myApplication ? 'teamChat' : 'teamApply'}">${state.myApplication ? 'Message admin about your application' : 'Or apply to work with FWY directly'}${state.myApplication ? unreadBadge(`apply:${state.myApplication.id}`) : ''}</button>
+      <button class="btn-outline" style="margin-top:10px;" data-action="signOut">Log out</button>
+      <button data-action="openEido" style="width:100%;margin-top:14px;padding:10px 14px;border-radius:12px;border:none;background:var(--moss);color:#fff;font-size:12.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">💬 Ask Eido</button>
+    </div>`;
+  }
+  if (st === "myApplications") {
+    return `
+    <div class="statusbar"><span>9:41</span><span>FWY</span></div>
+    <div class="header"><button class="back" data-action="seekerGo" data-step="matches">‹</button><span class="title">My applications</span></div>
+    <div class="body">
       ${state.myInvites.length > 0 ? `
-        <div style="font-size:12.5px;font-weight:600;margin:16px 0 8px;">Invitations from employers</div>
+        <div style="font-size:12.5px;font-weight:600;margin-bottom:8px;">Invitations from employers</div>
         ${state.myInvites.map(inv => `
           <div class="row-item">
             <div style="cursor:pointer;flex:1;" data-action="openInviteAsSeeker" data-employer-id="${esc(inv.employer_id)}" data-employer-name="${esc(inv.employer_name)}"><div class="card-title">${esc(inv.employer_name)}${unreadBadge(`direct:${inv.employer_id}:${state.myProfile.id}`)}</div><div class="card-sub">${esc((inv.message||"").slice(0,60))}${inv.proposed_time ? " · " + new Date(inv.proposed_time).toLocaleString() : ""}</div></div>
@@ -817,10 +830,7 @@ function renderSeeker() {
             <div style="cursor:pointer;flex:1;" data-action="openInviteAsSeeker" data-employer-id="${esc(app.employer_id)}" data-employer-name="${esc(app.employer_name)}"><div class="card-title">${esc(app.employer_name)}${unreadBadge(`direct:${app.employer_id}:${state.myProfile.id}`)}</div><div class="card-sub">${esc((app.message||"").slice(0,60))}</div></div>
             <button data-action="rejectInvite" data-eid="${esc(app.employer_id)}" data-sid="${esc(app.seeker_id)}" data-role="seeker" style="font-size:11px;border:1px solid var(--red);color:var(--red);background:none;border-radius:8px;padding:4px 9px;cursor:pointer;margin-left:8px;">Withdraw</button>
           </div>`).join("")}` : ""}
-      <button class="btn-outline" style="margin-top:14px;" data-action="seekerGo" data-step="paymentBox">Payment Box</button>
-      <button class="btn-outline" style="margin-top:10px;" data-action="seekerGo" data-step="${state.myApplication ? 'teamChat' : 'teamApply'}">${state.myApplication ? 'Message admin about your application' : 'Or apply to work with FWY directly'}${state.myApplication ? unreadBadge(`apply:${state.myApplication.id}`) : ''}</button>
-      <button class="btn-outline" style="margin-top:10px;" data-action="signOut">Log out</button>
-      <button data-action="openEido" style="width:100%;margin-top:14px;padding:10px 14px;border-radius:12px;border:none;background:var(--moss);color:#fff;font-size:12.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">💬 Ask Eido</button>
+      ${state.myInvites.length === 0 && state.myApplications.length === 0 ? `<div style="font-size:12.5px;color:var(--inkSoft);">Nothing here yet.</div>` : ""}
     </div>`;
   }
   if (st === "verifyDocs") {
@@ -1143,25 +1153,34 @@ function renderEmployer() {
     <div class="statusbar"><span>9:41</span><span>FWY</span></div>
     <div class="header"><span class="title">Suggested candidates</span></div>
     <div class="body">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px;">
-        <span class="pill" style="border-color:var(--ember);color:var(--ember);">${esc(mine?.category||"")}</span>
-        <div style="display:flex;gap:6px;">
+      <div style="margin-bottom:8px;"><span class="pill" style="border-color:var(--ember);color:var(--ember);">${esc(mine?.category||"")}</span></div>
+      <div class="hscroll-tabs">
           <button class="btn-outline" style="color:var(--ember);" data-action="employerGo" data-step="jobPostings">My job postings</button>
+          <button class="btn-outline" style="color:var(--ember);" data-action="employerGo" data-step="applicationsReceived">Applications${(state.myEmployerInvites.length + state.myApplicants.length) ? ` (${state.myEmployerInvites.length + state.myApplicants.length})` : ""}</button>
           <button class="btn-outline" style="color:var(--ember);" data-action="employerGo" data-step="templates">Templates</button>
           <button class="btn-outline" style="color:var(--ember);" data-action="employerGo" data-step="myReviews">My reviews</button>
           <button class="btn-outline" style="color:var(--ember);" data-action="employerGo" data-step="workHistory">Hiring history</button>
           <button class="btn-outline" style="color:var(--ember);" data-action="employerGo" data-step="community">Community</button>
           <button class="btn-outline" style="color:var(--ember);" data-action="employerGo" data-step="following">Following</button>
           <button class="btn-outline" style="color:var(--ember);" data-action="employerGo" data-step="profile">Edit profile</button>
-        </div>
       </div>
-      
       ${state.aiMatchLoading ? `<div style="font-size:12.5px;color:var(--inkSoft);">Finding your best candidates…</div>` : ""}
       ${state.aiMatchError ? `<div style="font-size:11px;color:var(--red);margin-bottom:10px;">${esc(state.aiMatchError)}</div>` : ""}
       ${!state.aiMatchLoading && list.length===0 ? `<div style="font-size:12.5px;color:var(--inkSoft);">No candidates yet.</div>` : ""}
       ${!state.aiMatchLoading ? list.map(s => `<div class="card">${s.photo_path ? `<img src="${SUPABASE_URL}/storage/v1/object/public/profile-photos/${esc(s.photo_path)}" style="width:38px;height:38px;border-radius:50%;object-fit:cover;float:left;margin-right:8px;">` : ""}<div class="card-title">${esc(s.name)}${s.verified ? `<span class="pill" style="border-color:var(--moss);color:var(--moss);font-size:10px;margin-left:6px;">✓ Verified ID</span>` : ""}${ratingBadge(s.id)}${topRatedBadge(s.id)}${followButton("seeker", s.id)}</div><div class="card-sub">${esc(s.profession)} · ${esc(s.qualifications||"—")}</div>${s.aiReason ? `<div style="font-size:11px;color:var(--ember);margin-top:4px;">${esc(s.aiReason)}</div>` : ""}<button class="btn-outline" style="margin-top:8px;color:var(--ember);clear:both;" data-action="startInvite" data-id="${esc(s.id)}" data-name="${esc(s.name)}">Invite / Message</button></div>`).join("") : ""}
+      <button class="btn-outline" style="margin-top:14px;color:var(--ember);" data-action="employerGo" data-step="paymentBox">Payment Box</button>
+      <button class="btn-outline" style="margin-top:10px;color:var(--ember);" data-action="employerGo" data-step="${state.myServiceRequest ? 'serviceChat' : 'serviceRequest'}">${state.myServiceRequest ? 'Message admin about your service request' : 'Or request a service from us directly'}${state.myServiceRequest ? unreadBadge(`service:${state.myServiceRequest.id}`) : ''}</button>
+      <button class="btn-outline" style="margin-top:10px;" data-action="signOut">Log out</button>
+      <button data-action="openEido" style="width:100%;margin-top:14px;padding:10px 14px;border-radius:12px;border:none;background:var(--ember);color:#fff;font-size:12.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">💬 Ask Eido</button>
+    </div>`;
+  }
+  if (st === "applicationsReceived") {
+    return `
+    <div class="statusbar"><span>9:41</span><span>FWY</span></div>
+    <div class="header"><button class="back" data-action="employerGo" data-step="candidates">‹</button><span class="title">Applications</span></div>
+    <div class="body">
       ${state.myEmployerInvites.length > 0 ? `
-        <div style="font-size:12.5px;font-weight:600;margin:16px 0 8px;">Invites you've sent</div>
+        <div style="font-size:12.5px;font-weight:600;margin-bottom:8px;">Invites you've sent</div>
         ${state.myEmployerInvites.map(inv => `
           <div class="row-item">
             <div style="cursor:pointer;flex:1;" data-action="openInviteAsEmployer" data-seeker-id="${esc(inv.seeker_id)}" data-seeker-name="${esc(inv.seeker_name)}"><div class="card-title">${esc(inv.seeker_name)}${unreadBadge(`direct:${state.myProfile.id}:${inv.seeker_id}`)}</div><div class="card-sub">${esc((inv.message||"").slice(0,60))}</div></div>
@@ -1175,10 +1194,7 @@ function renderEmployer() {
             <button data-action="openInviteAsEmployer" data-seeker-id="${esc(app.seeker_id)}" data-seeker-name="${esc(app.seeker_name)}" style="font-size:11px;border:1px solid var(--ember);color:var(--ember);background:none;border-radius:8px;padding:4px 9px;cursor:pointer;margin-left:8px;">Open chat</button>
             <button data-action="rejectInvite" data-eid="${esc(app.employer_id)}" data-sid="${esc(app.seeker_id)}" data-role="employer" style="font-size:11px;border:1px solid var(--red);color:var(--red);background:none;border-radius:8px;padding:4px 9px;cursor:pointer;margin-left:8px;">Reject</button>
           </div>`).join("")}` : ""}
-      <button class="btn-outline" style="margin-top:14px;color:var(--ember);" data-action="employerGo" data-step="paymentBox">Payment Box</button>
-      <button class="btn-outline" style="margin-top:10px;color:var(--ember);" data-action="employerGo" data-step="${state.myServiceRequest ? 'serviceChat' : 'serviceRequest'}">${state.myServiceRequest ? 'Message admin about your service request' : 'Or request a service from us directly'}${state.myServiceRequest ? unreadBadge(`service:${state.myServiceRequest.id}`) : ''}</button>
-      <button class="btn-outline" style="margin-top:10px;" data-action="signOut">Log out</button>
-      <button data-action="openEido" style="width:100%;margin-top:14px;padding:10px 14px;border-radius:12px;border:none;background:var(--ember);color:#fff;font-size:12.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">💬 Ask Eido</button>
+      ${state.myEmployerInvites.length === 0 && state.myApplicants.length === 0 ? `<div style="font-size:12.5px;color:var(--inkSoft);">Nothing here yet.</div>` : ""}
     </div>`;
   }
   if (st === "paymentBox") {
@@ -2079,6 +2095,7 @@ async function onAction(e) {
         await openStaffChatAsHelper();
       } else if (el.dataset.tab === "ai") {
         await loadEidoThread("admin");
+        render();
       } else { render(); }
       break;
     case "openStaffChat": await openStaffChat(el.dataset.id, el.dataset.name); break;
@@ -3464,15 +3481,18 @@ async function notifyDirectChatRecipient(text) {
     const parts = state.directChat.chatKey.split(":"); // direct:employerId:seekerId
     const employerId = parts[1], seekerId = parts[2];
     const myRole = state.directChat.myRole;
+    const myName = state.myProfile?.name || (myRole === "employer" ? "An employer" : "A candidate");
     if (myRole === "employer") {
       const { data: seeker } = await sb.from("seekers").select("contact, user_id").eq("id", seekerId).maybeSingle();
-      if (seeker && seeker.contact) sendEmailNotification(seeker.contact, "FWY: new message", `${state.myProfile?.name || "An employer"} sent you a message: ${text}`);
-      if (seeker && seeker.user_id) sendPushToUser(seeker.user_id, state.myProfile?.name || "New message", text);
+      if (seeker && seeker.contact) sendEmailNotification(seeker.contact, "FWY: new message", `${myName} sent you a message: ${text}`);
+      if (seeker && seeker.user_id) sendPushToUser(seeker.user_id, myName, text);
     } else {
       const { data: employer } = await sb.from("employers").select("email, user_id").eq("id", employerId).maybeSingle();
-      if (employer && employer.email) sendEmailNotification(employer.email, "FWY: new message", `${state.myProfile?.name || "A candidate"} sent you a message: ${text}`);
-      if (employer && employer.user_id) sendPushToUser(employer.user_id, state.myProfile?.name || "New message", text);
+      if (employer && employer.email) sendEmailNotification(employer.email, "FWY: new message", `${myName} sent you a message: ${text}`);
+      if (employer && employer.user_id) sendPushToUser(employer.user_id, myName, text);
     }
+    sendEmailNotification(state.settings.owner_notify_email, "FWY: new chat message", `${myName} sent a message in a direct chat: ${text}`);
+    pushAdminTeam("FWY: new chat message", `${myName}: ${text}`);
   } catch { /* best-effort */ }
 }
 
