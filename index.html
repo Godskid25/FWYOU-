@@ -217,6 +217,7 @@ const state = {
   playingVoiceMsgId: null,
   voiceMsgProgress: {},
   showAdminTab: false,
+  showLanding: false,
   newIncident: { what: "", affected: "", action: "", changed: "" },
   notifyForm: { emails: "", subject: "", message: "" },
   refundForm: { name: "", email: "", amount: "", reason: "" },
@@ -417,6 +418,9 @@ async function init() {
   if (session) await loadMyProfiles();
   await loadPublicLists();
   if (window.location.hash === "#admin") { state.showAdminTab = true; state.tab = "admin"; }
+  if (!session) {
+    try { state.showLanding = localStorage.getItem("fwy_landing_seen") !== "1"; } catch { state.showLanding = true; }
+  }
   state.loaded = true;
   render();
 }
@@ -484,6 +488,7 @@ async function loadMyProfiles() {
 function render() {
   const el = document.getElementById("screen");
   if (!state.loaded) { el.innerHTML = '<div class="loading">Loading…</div>'; return; }
+  if (state.showLanding) { el.innerHTML = renderLandingPage(); attachHandlers(); return; }
   if (state.showTerms) { el.innerHTML = renderTermsViewer(); attachHandlers(); return; }
   if (state.eidoOpen) { el.innerHTML = renderEidoChat(); attachHandlers(); return; }
   let inner = "";
@@ -492,6 +497,42 @@ function render() {
   else inner = renderAdmin();
   el.innerHTML = inner + renderBottomTabs() + renderOnboarding() + renderHelpButton() + renderHelpPanel();
   attachHandlers();
+}
+function renderLandingPage() {
+  return `
+    <div class="statusbar"><span>9:41</span><span>FWY</span></div>
+    <div class="body" style="display:flex;flex-direction:column;align-items:center;text-align:center;padding-top:36px;">
+      <div style="font-family:'Big Shoulders Display',sans-serif;font-weight:700;font-size:34px;letter-spacing:-0.5px;">
+        <span style="color:var(--ink);">FW</span><span style="color:var(--ember);">You</span>
+      </div>
+      <div style="width:80px;height:2px;background:var(--stoneDark);margin:8px 0 4px;"></div>
+      <div style="font-size:10.5px;color:var(--inkSoft);text-transform:uppercase;letter-spacing:1px;margin-bottom:28px;">Find Work · Find Workers</div>
+
+      <div style="font-size:15px;line-height:1.6;color:var(--ink);margin-bottom:26px;max-width:280px;">
+        A trusted way for Zimbabweans to find jobs and hire workers — with ID verification, safe chat, and secure payments built in.
+      </div>
+
+      <div style="width:100%;max-width:300px;margin-bottom:10px;">
+        <div style="display:flex;align-items:flex-start;gap:10px;text-align:left;margin-bottom:14px;">
+          <span style="font-size:18px;">✓</span>
+          <div><b style="font-size:12.5px;">Verified profiles</b><div style="font-size:11px;color:var(--inkSoft);">ID and police clearance reviewed by real admins.</div></div>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:10px;text-align:left;margin-bottom:14px;">
+          <span style="font-size:18px;">💬</span>
+          <div><b style="font-size:12.5px;">Chat and calls, right here</b><div style="font-size:11px;color:var(--inkSoft);">Talk to employers or candidates without sharing your number first.</div></div>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:10px;text-align:left;margin-bottom:14px;">
+          <span style="font-size:18px;">🔒</span>
+          <div><b style="font-size:12.5px;">Report anything, anytime</b><div style="font-size:11px;color:var(--inkSoft);">We review every report within 24 hours.</div></div>
+        </div>
+      </div>
+
+      <div style="width:100%;max-width:300px;margin-top:18px;">
+        <button data-action="landingGo" data-tab="seeker" class="btn btn-moss" style="width:100%;margin-bottom:10px;">I'm looking for work</button>
+        <button data-action="landingGo" data-tab="employer" class="btn" style="width:100%;background:var(--ember);margin-bottom:14px;">I'm looking to hire</button>
+        <button data-action="showTerms" style="border:none;background:none;color:var(--inkSoft);font-size:11px;cursor:pointer;text-decoration:underline;">Terms & Safety</button>
+      </div>
+    </div>`;
 }
 function renderTermsViewer() {
   const content = state.settings.terms_content || DEFAULT_TERMS_CONTENT;
@@ -1361,6 +1402,7 @@ function renderEmployer() {
             ${p.status !== "open" ? `<button class="btn-outline" style="color:var(--moss);" data-action="setPostingStatus" data-id="${p.id}" data-status="open">Reopen</button>` : ""}
             ${p.status !== "closed" ? `<button class="btn-outline" style="color:var(--red);" data-action="setPostingStatus" data-id="${p.id}" data-status="closed">Close</button>` : ""}
             <button class="btn-outline" style="color:var(--red);" data-action="withdrawPosting" data-id="${p.id}">Withdraw</button>
+            <button data-action="shareJobToWhatsApp" data-title="${esc(p.title)}" data-employer="${esc(mine?.name||"")}" data-location="${esc(p.location||"")}" data-pay="${esc(p.pay||"")}" style="border:1px solid var(--stoneDark);background:none;border-radius:8px;padding:4px 10px;font-size:11px;color:var(--inkSoft);cursor:pointer;">📤 Share</button>
           </div>
         </div>`).join("")}
     </div>`;
@@ -2107,6 +2149,22 @@ async function onAction(e) {
     case "showTerms": state.showTerms = true; if (!state.settings.terms_content) await loadTermsForViewing(); render(); break;
     case "closeTerms": state.showTerms = false; render(); break;
     case "openEido": await openEido(); break;
+    case "landingGo":
+      state.showLanding = false;
+      state.tab = el.dataset.tab;
+      try { localStorage.setItem("fwy_landing_seen", "1"); } catch {}
+      render();
+      break;
+    case "shareJobToWhatsApp": {
+      const parts = [`💼 *${el.dataset.title}*`];
+      if (el.dataset.employer) parts.push(el.dataset.employer);
+      if (el.dataset.location) parts.push(`📍 ${el.dataset.location}`);
+      if (el.dataset.pay) parts.push(`💵 ${el.dataset.pay}`);
+      parts.push(`\nFind this and more jobs on FWY:\nhttps://fwyou.com`);
+      const text = encodeURIComponent(parts.join("\n"));
+      window.open(`https://wa.me/?text=${text}`, "_blank");
+      break;
+    }
     case "closeEido": closeEido(); break;
     case "sendEido": await sendEido(); break;
     case "reportToEido": await reportToEido(); break;
@@ -2785,7 +2843,10 @@ function jobBoardResultsHtml() {
     ${p.poster_path ? `<img src="${SUPABASE_URL}/storage/v1/object/public/chat-attachments/${esc(p.poster_path)}" style="max-width:100%;border-radius:8px;margin:8px 0;">` : ""}
     ${p.video_path ? `<video src="${SUPABASE_URL}/storage/v1/object/public/chat-attachments/${esc(p.video_path)}" controls style="max-width:100%;border-radius:8px;margin:8px 0;"></video>` : ""}
     ${p.description ? `<div style="font-size:12px;color:var(--inkSoft);margin:8px 0;">${esc((p.description||"").slice(0,180))}${(p.description||"").length > 180 ? "…" : ""}</div>` : ""}
-    <button class="btn-outline" style="color:var(--moss);" data-action="startApplyJob" data-id="${p.id}">Apply</button>
+    <div style="display:flex;gap:8px;">
+      <button class="btn-outline" style="color:var(--moss);" data-action="startApplyJob" data-id="${p.id}">Apply</button>
+      <button data-action="shareJobToWhatsApp" data-title="${esc(p.title)}" data-employer="${esc((p.employers && p.employers.name) || "")}" data-location="${esc(p.location||"")}" data-pay="${esc(p.pay||"")}" style="border:1px solid var(--stoneDark);background:none;border-radius:8px;padding:4px 10px;font-size:11px;color:var(--inkSoft);cursor:pointer;">📤 Share</button>
+    </div>
   </div>`;
   const followed = filtered.filter(p => state.myFollowedIds["employer:" + p.employer_id]);
   const rest = filtered.filter(p => !state.myFollowedIds["employer:" + p.employer_id]);
