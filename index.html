@@ -790,6 +790,8 @@ function renderSeeker() {
         <div style="font-size:11px;font-weight:600;margin-bottom:4px;">Your referral code</div>
         <div style="font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:700;letter-spacing:2px;">${esc(state.myProfile.referral_code||"")}</div>
         <div style="font-size:11px;color:var(--inkSoft);margin-top:6px;">Share this with friends — you've referred ${state.referralCount} so far.</div>
+        ${accessRemainingLine(state.myProfile.access_until)}
+        <button data-action="shareReferralToWhatsApp" data-code="${esc(state.myProfile.referral_code||'')}" style="width:100%;margin-top:10px;border:1px solid var(--moss);background:none;border-radius:8px;padding:7px 10px;font-size:11.5px;color:var(--moss);cursor:pointer;">📤 Invite a friend</button>
       </div>`}
       <button class="btn btn-moss" data-action="saveSeekerProfile">Save profile</button>
       <button class="btn-outline" style="margin-top:10px;" data-action="seekerGo" data-step="${state.myApplication ? 'teamChat' : 'teamApply'}">${state.myApplication ? 'Message admin about your application' : 'Or apply to work with FWY directly'}${state.myApplication ? unreadBadge(`apply:${state.myApplication.id}`) : ''}</button>
@@ -845,7 +847,7 @@ function renderSeeker() {
       ${state.aiMatchLoading ? `<div style="font-size:12.5px;color:var(--inkSoft);">Finding your best matches…</div>` : ""}
       ${state.aiMatchError ? `<div style="font-size:11px;color:var(--red);margin-bottom:10px;">${esc(state.aiMatchError)}</div>` : ""}
       ${!state.aiMatchLoading && list.length===0 ? `<div style="font-size:12.5px;color:var(--inkSoft);">No employers posted in your category yet.</div>` : ""}
-      ${!state.aiMatchLoading ? list.map(e => `<div class="card" style="display:flex;gap:10px;align-items:flex-start;"><div style="flex:1;">${e.logo_path ? `<img src="${SUPABASE_URL}/storage/v1/object/public/profile-photos/${esc(e.logo_path)}" style="width:38px;height:38px;border-radius:8px;object-fit:cover;float:left;margin-right:8px;">` : ""}<div class="card-title">${esc(e.name)}${ratingBadge(e.id)}${topRatedBadge(e.id)}${followButton("employer", e.id)}</div><div class="card-sub">${esc(e.what_do)}</div>${e.aiReason ? `<div style="font-size:11px;color:var(--moss);margin-top:4px;">${esc(e.aiReason)}</div>` : ""}${e.id ? `<button class="btn-outline" style="margin-top:8px;color:var(--moss);clear:both;" data-action="startApply" data-id="${esc(e.id)}" data-name="${esc(e.name)}">Apply</button>` : ""}</div></div>`).join("") : ""}
+      ${!state.aiMatchLoading ? list.map(e => `<div class="card" style="display:flex;gap:10px;align-items:flex-start;"><div style="flex:1;">${e.logo_path ? `<img src="${SUPABASE_URL}/storage/v1/object/public/profile-photos/${esc(e.logo_path)}" style="width:38px;height:38px;border-radius:8px;object-fit:cover;float:left;margin-right:8px;">` : ""}<div class="card-title">${esc(e.name)}${e.verified ? `<span class="pill" style="border-color:var(--moss);color:var(--moss);font-size:10px;margin-left:6px;">✓ Verified</span>` : ""}${ratingBadge(e.id)}${topRatedBadge(e.id)}${followButton("employer", e.id)}</div><div class="card-sub">${esc(e.what_do)}</div>${e.aiReason ? `<div style="font-size:11px;color:var(--moss);margin-top:4px;">${esc(e.aiReason)}</div>` : ""}${e.id ? `<button class="btn-outline" style="margin-top:8px;color:var(--moss);clear:both;" data-action="startApply" data-id="${esc(e.id)}" data-name="${esc(e.name)}">Apply</button>` : ""}</div></div>`).join("") : ""}
       <button class="btn-outline" style="margin-top:14px;" data-action="seekerGo" data-step="paymentBox">Payment Box</button>
       <button class="btn-outline" style="margin-top:10px;" data-action="seekerGo" data-step="${state.myApplication ? 'teamChat' : 'teamApply'}">${state.myApplication ? 'Message admin about your application' : 'Or apply to work with FWY directly'}${state.myApplication ? unreadBadge(`apply:${state.myApplication.id}`) : ''}</button>
       <button class="btn-outline" style="margin-top:10px;" data-action="signOut">Log out</button>
@@ -1162,6 +1164,8 @@ function renderEmployer() {
         <div style="font-size:11px;font-weight:600;margin-bottom:4px;">Your referral code</div>
         <div style="font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:700;letter-spacing:2px;">${esc(state.myProfile.referral_code||"")}</div>
         <div style="font-size:11px;color:var(--inkSoft);margin-top:6px;">Share this with friends — you've referred ${state.referralCount} so far.</div>
+        ${accessRemainingLine(state.myProfile.access_until)}
+        <button data-action="shareReferralToWhatsApp" data-code="${esc(state.myProfile.referral_code||'')}" style="width:100%;margin-top:10px;border:1px solid var(--ember);background:none;border-radius:8px;padding:7px 10px;font-size:11.5px;color:var(--ember);cursor:pointer;">📤 Invite a friend</button>
       </div>`}
       <button class="btn btn-ember" data-action="saveEmployerProfile">Save profile</button>
       <button class="btn-outline" style="margin-top:10px;color:var(--ember);" data-action="employerGo" data-step="${state.myServiceRequest ? 'serviceChat' : 'serviceRequest'}">${state.myServiceRequest ? 'Message admin about your service request' : 'Or request a service from us directly'}${state.myServiceRequest ? unreadBadge(`service:${state.myServiceRequest.id}`) : ''}</button>
@@ -1205,6 +1209,14 @@ function renderEmployer() {
           <button class="btn-outline" style="color:var(--ember);" data-action="employerGo" data-step="following">Following</button>
           <button class="btn-outline" style="color:var(--ember);" data-action="employerGo" data-step="profile">Edit profile</button>
       </div>
+      ${mine?.verified ? `<div style="margin-bottom:10px;"><span class="pill" style="border-color:var(--moss);color:var(--moss);background:rgba(95,122,104,.08);">✓ Verified Employer</span></div>` :
+        (mine?.verification_pending ? `<div style="margin-bottom:10px;">
+          ${state.myVerification?.status === "pending"
+            ? `<span class="status-badge status-submitted">Documents submitted — awaiting review</span>`
+            : (state.myVerification?.status === "rejected"
+              ? `<span class="status-badge status-rejected">Rejected</span> <button class="btn-outline" style="color:var(--ember);" data-action="employerGo" data-step="verifyDocs">Resubmit documents</button>`
+              : `<span class="status-badge status-pending">Verification paid — documents needed</span> <button class="btn-outline" style="color:var(--ember);" data-action="employerGo" data-step="verifyDocs">Upload documents</button>`)}
+        </div>` : "")}
       ${state.aiMatchLoading ? `<div style="font-size:12.5px;color:var(--inkSoft);">Finding your best candidates…</div>` : ""}
       ${state.aiMatchError ? `<div style="font-size:11px;color:var(--red);margin-bottom:10px;">${esc(state.aiMatchError)}</div>` : ""}
       ${!state.aiMatchLoading && list.length===0 ? `<div style="font-size:12.5px;color:var(--inkSoft);">No candidates yet.</div>` : ""}
@@ -1238,11 +1250,35 @@ function renderEmployer() {
       ${state.myEmployerInvites.length === 0 && state.myApplicants.length === 0 ? `<div style="font-size:12.5px;color:var(--inkSoft);">Nothing here yet.</div>` : ""}
     </div>`;
   }
+  if (st === "verifyDocs") {
+    const badge = mineVerifyBadge(state.myProfile);
+    return `
+    <div class="statusbar"><span>9:41</span><span>FWY</span></div>
+    <div class="header"><button class="back" data-action="employerGo" data-step="candidates">‹</button><span class="title">Verify your account</span></div>
+    <div class="body">
+      <div style="font-size:12px;color:var(--inkSoft);margin-bottom:12px;">Upload your ID and business/police clearance to get a verified badge candidates can see.</div>
+      ${badge}
+      <label style="display:block;font-size:10.5px;color:var(--inkSoft);text-transform:uppercase;margin-bottom:6px;">ID Document (photo)</label>
+      <div class="file-wrap">
+        <input type="file" id="idFile" accept="image/*">
+        <div id="idFileName" class="fname"></div>
+      </div>
+      <label style="display:block;font-size:10.5px;color:var(--inkSoft);text-transform:uppercase;margin-bottom:6px;">Business/police clearance (photo)</label>
+      <div class="file-wrap">
+        <input type="file" id="clearanceFile" accept="image/*">
+        <div id="clearanceFileName" class="fname"></div>
+      </div>
+      ${state.verifyUploadErr ? `<div class="err">${esc(state.verifyUploadErr)}</div>` : ""}
+      <button class="btn btn-ember" data-action="submitVerifyDocs" ${state.verifyUploading ? "disabled" : ""}>${state.verifyUploading ? "Uploading…" : "Submit for verification"}</button>
+      <div class="note" style="margin-top:12px;">Your documents are private and only visible to FWY admin for review.</div>
+    </div>`;
+  }
   if (st === "paymentBox") {
     const s = state.settings;
     const bundles = [
       { id: "employerWeekly", name: "Weekly Access", desc: "See candidates for a week", price: s.employer_weekly },
       { id: "employerMonthly", name: "Monthly Access", desc: "See candidates for a month", price: s.employer_monthly },
+      { id: "verify", name: "Verification Badge", desc: "Business/ID check — reviewed by admin", price: s.verification_price },
       { id: "interview", name: "Interview Credit", desc: "Unlock 1 video/voice call", price: s.interview_credit_price },
     ];
     return `
@@ -1267,8 +1303,8 @@ function renderEmployer() {
   }
   if (st === "paymentConfirm") {
     const s = state.settings;
-    const names = { employerWeekly: "Weekly Access", employerMonthly: "Monthly Access", interview: "Interview Credit" };
-    const prices = { employerWeekly: s.employer_weekly, employerMonthly: s.employer_monthly, interview: s.interview_credit_price };
+    const names = { employerWeekly: "Weekly Access", employerMonthly: "Monthly Access", verify: "Verification Badge", interview: "Interview Credit" };
+    const prices = { employerWeekly: s.employer_weekly, employerMonthly: s.employer_monthly, verify: s.verification_price, interview: s.interview_credit_price };
     const b = state.selectedBundle;
     return paymentStep(names[b] || "", prices[b] || 0, "var(--ember)", 'data-action="employerGo" data-step="paymentBox"', "confirmEmployerPayment");
   }
@@ -1599,9 +1635,28 @@ ${state.chatAttachmentUploading ? `<div class="note" style="padding:0 12px;">Upl
       <button class="trash" data-action="adminRemoveSeeker" data-id="${s.id}">🗑</button></div>`;
     }).join("");
   else if (t === "employers") content = state.adminEmployers.length===0 ? `<div style="font-size:12px;color:var(--inkSoft);">None yet.</div>` :
-    state.adminEmployers.map(e => `
-      <div class="row-item"><div><div class="card-title">${esc(e.name)}</div><div class="card-sub">${esc(e.what_do)} · ${esc(e.category)}</div></div>
-      <button class="trash" data-action="adminRemoveEmployer" data-id="${e.id}">🗑</button></div>`).join("");
+    state.adminEmployers.map(e => {
+      const v = e._verification;
+      let verifBlock = "";
+      if (e.verification_pending && !e.verified) {
+        if (v && v.status === "pending" && v._idUrl && v._clearanceUrl) {
+          verifBlock = `<div style="margin-top:6px;">
+            <div class="doc-row">
+              <a class="doc-link" href="${esc(v._idUrl)}" target="_blank">View ID</a>
+              <a class="doc-link" href="${esc(v._clearanceUrl)}" target="_blank">View Clearance</a>
+            </div>
+            <button data-action="approveVerification" data-role="employer" data-id="${e.id}" data-name="${esc(e.name)}" style="font-size:11px;border:1px solid var(--moss);color:var(--moss);background:none;border-radius:8px;padding:3px 8px;cursor:pointer;margin-right:6px;">Approve</button>
+            <button data-action="rejectVerification" data-id="${e.id}" data-uid="${esc(v.user_id)}" data-name="${esc(e.name)}" style="font-size:11px;border:1px solid var(--red);color:var(--red);background:none;border-radius:8px;padding:3px 8px;cursor:pointer;">Reject</button>
+          </div>`;
+        } else {
+          verifBlock = `<div style="margin-top:6px;"><span class="pill" style="border-color:var(--ember);color:var(--ember);background:rgba(191,107,31,.08);">Paid — awaiting document upload</span></div>`;
+        }
+      }
+      return `
+      <div class="row-item"><div style="flex:1;"><div class="card-title">${esc(e.name)}${e.verified?" · ✓ Verified":""}</div><div class="card-sub">${esc(e.what_do)} · ${esc(e.category)}</div>
+      ${verifBlock}</div>
+      <button class="trash" data-action="adminRemoveEmployer" data-id="${e.id}">🗑</button></div>`;
+    }).join("");
   else if (t === "applicants") {
     if (state.payingApplicant) {
       const pa = state.payingApplicant;
@@ -2165,6 +2220,12 @@ async function onAction(e) {
       window.open(`https://wa.me/?text=${text}`, "_blank");
       break;
     }
+    case "shareReferralToWhatsApp": {
+      const code = el.dataset.code || "";
+      const text = encodeURIComponent(`Hey! I've been using FWY to find work/hire people in Zimbabwe — it's got verified profiles and safe in-app chat. Use my code *${code}* when you sign up:\nhttps://fwyou.com`);
+      window.open(`https://wa.me/?text=${text}`, "_blank");
+      break;
+    }
     case "closeEido": closeEido(); break;
     case "sendEido": await sendEido(); break;
     case "reportToEido": await reportToEido(); break;
@@ -2183,7 +2244,7 @@ async function onAction(e) {
     case "changeTrial": await changeTrial(parseInt(el.dataset.delta)); break;
     case "savePricing": await savePricing(); break;
     case "removeMoneyAccount": await removeMoneyAccount(el.dataset.id); break;
-    case "approveVerification": await approveVerification(el.dataset.id, el.dataset.name); break;
+    case "approveVerification": await approveVerification(el.dataset.id, el.dataset.name, el.dataset.role || "seeker"); break;
     case "rejectVerification": await rejectVerification(el.dataset.id, el.dataset.uid, el.dataset.name); break;
     case "submitVerifyDocs": await uploadVerificationDocs(); break;
     case "startInvite": startInvite(el.dataset.id, el.dataset.name); break;
@@ -2221,6 +2282,7 @@ async function onAction(e) {
     case "setPaydayPeriod": state.payday.calcForm.period = el.dataset.period; render(); break;
     case "calculatePay": await calculatePay(); break;
     case "stopVoiceRecording": stopVoiceRecording(); break;
+    case "discardRecording": discardRecording(); break;
     case "discardVoiceReview": discardVoiceReview(); break;
     case "toggleVoiceReviewPlayback": toggleVoiceReviewPlayback(); break;
     case "sendVoiceReviewNow": await sendVoiceReviewNow(); break;
@@ -2424,6 +2486,19 @@ async function loadAdminLists() {
       }
     } catch { /* skip — doc view just won't show */ }
   }
+  const pendingEmployers = state.adminEmployers.filter(x => x.verification_pending && !x.verified);
+  for (const employer of pendingEmployers) {
+    try {
+      const { data: v } = await sb.from("verifications").select("*").eq("user_id", employer.user_id).maybeSingle();
+      if (v && v.status === "pending") {
+        const { data: idUrlData } = await sb.storage.from("verification-docs").createSignedUrl(v.id_document_path, 3600);
+        const { data: clearanceUrlData } = await sb.storage.from("verification-docs").createSignedUrl(v.police_clearance_path, 3600);
+        employer._verification = { ...v, _idUrl: idUrlData?.signedUrl, _clearanceUrl: clearanceUrlData?.signedUrl };
+      } else if (v) {
+        employer._verification = v;
+      }
+    } catch { /* skip — doc view just won't show */ }
+  }
   if (state.adminRole === "owner") {
     const { data: helpers } = await sb.from("roles").select("*").eq("role", "helper");
     const { data: money } = await sb.from("money_accounts").select("*");
@@ -2622,7 +2697,7 @@ async function uploadVerificationDocs() {
     }, { onConflict: "user_id" });
     if (upsertErr) throw upsertErr;
     state.myVerification = { user_id: uid, id_document_path: idPath, police_clearance_path: clearancePath, status: "pending" };
-    state.seekerStep = "matches";
+    if (state.tab === "employer") state.employerStep = "candidates"; else state.seekerStep = "matches";
   } catch (err) {
     state.verifyUploadErr = "Error: " + (err && err.message ? err.message : "something went wrong.");
   }
@@ -3399,6 +3474,23 @@ async function redeemReferral(code, newType, newId) {
   const referrer = seekerMatch ? { type: "seeker", id: seekerMatch.id } : (employerMatch ? { type: "employer", id: employerMatch.id } : null);
   if (!referrer) return;
   await sb.from("referrals").insert({ referrer_type: referrer.type, referrer_id: referrer.id, referred_type: newType, referred_id: newId });
+  await grantReferralReward(referrer.type, referrer.id);
+}
+const REFERRAL_REWARD_DAYS = 7;
+async function grantReferralReward(referrerType, referrerId) {
+  try {
+    const table = referrerType === "employer" ? "employers" : "seekers";
+    const { data: row } = await sb.from(table).select("access_until, name, contact, email, user_id").eq("id", referrerId).maybeSingle();
+    if (!row) return;
+    const now = new Date();
+    const currentExpiry = row.access_until ? new Date(row.access_until) : now;
+    const base = currentExpiry > now ? currentExpiry : now;
+    const newExpiry = new Date(base.getTime() + REFERRAL_REWARD_DAYS * 24 * 60 * 60 * 1000);
+    await sb.from(table).update({ access_until: newExpiry.toISOString() }).eq("id", referrerId);
+    const contact = row.contact || row.email;
+    if (contact) sendEmailNotification(contact, "FWY: you earned free days!", `Someone signed up using your referral code — you've been given ${REFERRAL_REWARD_DAYS} free days of access on FWY. Thanks for spreading the word!`);
+    if (row.user_id) sendPushToUser(row.user_id, "FWY referral reward", `You earned ${REFERRAL_REWARD_DAYS} free days for referring a friend!`);
+  } catch { /* best-effort, never block signup */ }
 }
 async function loadReferralCount() {
   const mine = state.myProfile;
@@ -3797,7 +3889,7 @@ function pickChatFile(ctx, kind) {
   };
   input.click();
 }
-let voiceRecorder = null, voiceChunks = [], voiceRecordingCtx = null, voiceRecordingTimer = null, voiceRecordingStream = null;
+let voiceRecorder = null, voiceChunks = [], voiceRecordingCtx = null, voiceRecordingTimer = null, voiceRecordingStream = null, voiceRecordingCancelled = false;
 async function toggleVoiceNote(ctx) {
   if (!chatContextInfo(ctx)) return;
   if (voiceRecordingCtx || state.voiceReview) return; // already recording or reviewing one
@@ -3805,6 +3897,7 @@ async function toggleVoiceNote(ctx) {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     voiceRecordingStream = stream;
     voiceChunks = [];
+    voiceRecordingCancelled = false;
     voiceRecorder = new MediaRecorder(stream);
     voiceRecordingCtx = ctx;
     state.voiceRecordingElapsed = 0;
@@ -3818,6 +3911,7 @@ async function toggleVoiceNote(ctx) {
       const finishedCtx = voiceRecordingCtx;
       const duration = state.voiceRecordingElapsed;
       voiceRecordingCtx = null;
+      if (voiceRecordingCancelled) { voiceRecordingCancelled = false; render(); return; }
       const blob = new Blob(voiceChunks, { type: "audio/webm" });
       if (blob.size > 500) {
         state.voiceReview = { ctx: finishedCtx, blob, url: URL.createObjectURL(blob), duration, playing: false };
@@ -3832,6 +3926,12 @@ async function toggleVoiceNote(ctx) {
 }
 function stopVoiceRecording() {
   if (voiceRecorder && voiceRecordingCtx) voiceRecorder.stop();
+}
+function discardRecording() {
+  if (voiceRecorder && voiceRecordingCtx) {
+    voiceRecordingCancelled = true;
+    voiceRecorder.stop();
+  }
 }
 function discardVoiceReview() {
   if (state.voiceReview) URL.revokeObjectURL(state.voiceReview.url);
@@ -4123,6 +4223,20 @@ async function logActivity(message) {
   await sb.from("admin_activity").insert({ actor_name: name, message });
 }
 
+function accessRemainingLine(accessUntilIso) {
+  if (!accessUntilIso) return "";
+  const until = new Date(accessUntilIso);
+  const now = new Date();
+  const daysLeft = Math.ceil((until - now) / (24 * 60 * 60 * 1000));
+  if (daysLeft <= 0) return `<div style="font-size:11px;color:var(--red);margin-top:6px;">Access expired ${Math.abs(daysLeft)} day(s) ago.</div>`;
+  return `<div style="font-size:11px;color:var(--moss);margin-top:6px;font-weight:600;">✓ ${daysLeft} day${daysLeft === 1 ? "" : "s"} of access remaining</div>`;
+}
+function extendAccess(currentIso, days) {
+  const now = new Date();
+  const current = currentIso ? new Date(currentIso) : now;
+  const base = current > now ? current : now;
+  return new Date(base.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
+}
 async function confirmSeekerPayment() {
   const b = state.selectedBundle;
   const s = state.settings;
@@ -4130,8 +4244,8 @@ async function confirmSeekerPayment() {
   if (!mine) return;
   const updates = {};
   let type = "", desc = "", price = 0;
-  if (b === "seekerWeekly") { updates.paid = true; type = "Subscription"; desc = "Seeker weekly access — " + mine.name; price = s.seeker_weekly; }
-  else if (b === "seekerMonthly") { updates.paid = true; type = "Subscription"; desc = "Seeker monthly access — " + mine.name; price = s.seeker_monthly; }
+  if (b === "seekerWeekly") { updates.paid = true; updates.access_until = extendAccess(mine.access_until, 7); type = "Subscription"; desc = "Seeker weekly access — " + mine.name; price = s.seeker_weekly; }
+  else if (b === "seekerMonthly") { updates.paid = true; updates.access_until = extendAccess(mine.access_until, 30); type = "Subscription"; desc = "Seeker monthly access — " + mine.name; price = s.seeker_monthly; }
   else if (b === "boost") { updates.boosted = true; type = "Boost"; desc = "Boost Profile — " + mine.name; price = s.boost_price; }
   else if (b === "verify") { updates.verification_pending = true; type = "Verification"; desc = "Verification Badge — " + mine.name; price = s.verification_price; }
   else if (b === "interview") { updates.interview_credits = (mine.interview_credits || 0) + 1; type = "Interview Credit"; desc = "Interview Credit — " + mine.name; price = s.interview_credit_price; }
@@ -4162,8 +4276,21 @@ async function confirmEmployerPayment() {
     render();
     return;
   }
+  if (b === "verify") {
+    const { data, error } = await sb.from("employers").update({ verification_pending: true }).eq("id", mine.id).select().maybeSingle();
+    if (!error && data) state.myProfile = data;
+    await logTransaction("Verification", "Verification Badge — " + mine.name, s.verification_price, "in");
+    const payerEmail = mine.email || state.session?.user?.email;
+    sendEmailNotification(payerEmail, "FWY payment received", `We've received your payment for the Verification Badge: $${(s.verification_price||0).toFixed(2)}. Upload your documents to complete verification.`);
+    sendEmailNotification(state.settings.owner_notify_email, "FWY: payment received", `Verification Badge — ${mine.name} — $${(s.verification_price||0).toFixed(2)} received.`);
+    state.employerStep = "verifyDocs";
+    state.selectedPaymentMethod = null;
+    render();
+    return;
+  }
   const price = b === "employerWeekly" ? s.employer_weekly : s.employer_monthly;
-  const { data, error } = await sb.from("employers").update({ paid: true }).eq("id", mine.id).select().maybeSingle();
+  const days = b === "employerWeekly" ? 7 : 30;
+  const { data, error } = await sb.from("employers").update({ paid: true, access_until: extendAccess(mine.access_until, days) }).eq("id", mine.id).select().maybeSingle();
   if (!error && data) state.myProfile = data;
   await logTransaction("Subscription", "Employer access — " + mine.name, price, "in");
   const payerEmail = mine.email || state.session?.user?.email;
@@ -4199,12 +4326,16 @@ async function confirmAdditionalFeePayment() {
   render();
 }
 
-async function approveVerification(id, name) {
-  const seeker = state.adminSeekers.find(x => x.id === id);
-  await sb.from("seekers").update({ verified: true, verification_pending: false }).eq("id", id);
-  if (seeker) await sb.from("verifications").update({ status: "approved", reviewed_at: new Date().toISOString() }).eq("user_id", seeker.user_id);
-  state.adminSeekers = state.adminSeekers.map(s => s.id === id ? { ...s, verified: true, verification_pending: false } : s);
-  await logActivity(`Approved verification for ${name || "a seeker"}.`);
+async function approveVerification(id, name, role) {
+  role = role || "seeker";
+  const table = role === "employer" ? "employers" : "seekers";
+  const list = role === "employer" ? state.adminEmployers : state.adminSeekers;
+  const person = list.find(x => x.id === id);
+  await sb.from(table).update({ verified: true, verification_pending: false }).eq("id", id);
+  if (person) await sb.from("verifications").update({ status: "approved", reviewed_at: new Date().toISOString() }).eq("user_id", person.user_id);
+  if (role === "employer") state.adminEmployers = state.adminEmployers.map(x => x.id === id ? { ...x, verified: true, verification_pending: false } : x);
+  else state.adminSeekers = state.adminSeekers.map(x => x.id === id ? { ...x, verified: true, verification_pending: false } : x);
+  await logActivity(`Approved verification for ${name || "a " + role}.`);
   await loadAdminLists();
   render();
 }
