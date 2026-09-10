@@ -324,6 +324,9 @@ function directChatScreen(backAttr) {
     <button data-action="startCall" data-audio="true" data-room="${esc(dc.chatKey.replace(/[^a-zA-Z0-9-]/g,'-'))}">Voice call</button>
     <button data-action="startCall" data-audio="false" data-room="${esc(dc.chatKey.replace(/[^a-zA-Z0-9-]/g,'-'))}">Video call</button>
   </div>
+  <div style="padding:8px 14px 0;">
+    <button data-action="reportUnsafe" data-chatkey="${esc(dc.chatKey)}" data-othername="${esc(dc.otherName)}" style="width:100%;background:rgba(177,74,62,.08);border:1px solid var(--red);color:var(--red);border-radius:10px;padding:8px 10px;font-size:11.5px;font-weight:600;cursor:pointer;">🚨 I feel unsafe — alert FWY now</button>
+  </div>
   <div class="chatwrap" style="flex:1;padding:14px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;">
     ${dc.msgs.length===0 ? `<div style="font-size:12px;color:var(--inkSoft);text-align:center;margin-top:20px;">No messages yet. Say hello.</div>` : ""}
     ${dc.msgs.map(m => `<div style="align-self:${m.sender_role===dc.myRole?'flex-end':'flex-start'};display:flex;align-items:center;gap:6px;max-width:78%;">${m.sender_role===dc.myRole ? `<button data-action="deleteMessage" data-id="${esc(m.id||'')}" title="Delete" style="background:none;border:none;color:var(--inkSoft);font-size:11px;cursor:pointer;padding:0;">✕</button>` : ""}<div style="background:${m.sender_role===dc.myRole?'var(--ink)':'#fff'};color:${m.sender_role===dc.myRole?'#fff':'var(--ink)'};border:${m.sender_role===dc.myRole?'none':'1px solid var(--stoneDark)'};border-radius:12px;padding:8px 12px;font-size:12.5px;">${chatBubbleContent(m)}</div></div>`).join("")}
@@ -1725,9 +1728,10 @@ ${state.chatAttachmentUploading ? `<div class="note" style="padding:0 12px;">Upl
     const ni = state.newIncident, nf = state.notifyForm, rf = state.refundForm;
     content = `
       ${state.adminUserReports.length > 0 ? `
-      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">Reports from users (via Eido)</div>
-      ${state.adminUserReports.map(r => `
-        <div class="card" style="margin-bottom:8px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">Reports from users</div>
+      ${[...state.adminUserReports].sort((a,b) => (b.urgent?1:0) - (a.urgent?1:0)).map(r => `
+        <div class="card" style="margin-bottom:8px;${r.urgent ? 'border-color:var(--red);background:rgba(177,74,62,.06);' : ''}">
+          ${r.urgent ? `<div style="font-size:11px;font-weight:700;color:var(--red);margin-bottom:4px;">🚨 URGENT SAFETY REPORT</div>` : ""}
           <div class="card-sub" style="margin-bottom:4px;">${esc(r.reporter_name||"Unknown")}${r.reporter_contact ? " · " + esc(r.reporter_contact) : ""} · ${r.created_at ? new Date(r.created_at).toLocaleString() : ""}</div>
           <div style="font-size:11.5px;white-space:pre-wrap;">${esc(r.transcript||"")}</div>
         </div>`).join("")}
@@ -2229,6 +2233,7 @@ async function onAction(e) {
     case "closeEido": closeEido(); break;
     case "sendEido": await sendEido(); break;
     case "reportToEido": await reportToEido(); break;
+    case "reportUnsafe": await reportUnsafe(el.dataset.chatkey, el.dataset.othername); break;
     case "pickEidoAttachment": document.getElementById("eidoFileInput")?.click(); break;
     case "clearEidoAttachment": state.eidoPendingAttachment = null; render(); break;
     case "deleteEidoMsg": {
@@ -2647,12 +2652,25 @@ async function saveSeekerProfile() {
     await sb.from("seeker_private_info").upsert({ seeker_id: data.id, id_number: f.id_number, health_info: f.health_info }, { onConflict: "seeker_id" });
   }
   if (isNew && f.referral_code) await redeemReferral(f.referral_code, "seeker", data.id);
+  if (isNew) notifyEmployersOfNewSeeker(f.name, category(f.department));
   state.myProfile = data;
   state.seekerStep = "matches";
   maybeShowOnboarding("seeker");
   await loadPublicLists();
   render();
   // AI matching disabled
+}
+async function notifyEmployersOfNewSeeker(seekerName, seekerCategory) {
+  try {
+    const { data: postings } = await sb.from("job_postings").select("employer_id").eq("status", "open").eq("department", seekerCategory).limit(200);
+    if (!postings || postings.length === 0) return;
+    const employerIds = [...new Set(postings.map(p => p.employer_id))];
+    const { data: employers } = await sb.from("employers").select("user_id").in("id", employerIds);
+    if (!employers) return;
+    for (const e of employers) {
+      if (e.user_id) sendPushToUser(e.user_id, "FWY: new candidate for you", `${seekerName || "A new candidate"} just joined in ${seekerCategory} — check them out.`);
+    }
+  } catch { /* best-effort, never block signup */ }
 }
 async function saveEmployerProfile() {
   const f = state.employerForm;
@@ -2808,6 +2826,16 @@ async function createJobPosting() {
   state.employerStep = "jobPostings";
   render();
   notifyFollowersOfNewJob(mine.id, mine.name, f.title);
+  notifySeekersOfMatchingJob(mine.name, f.title, category(f.department));
+}
+async function notifySeekersOfMatchingJob(employerName, jobTitle, jobCategory) {
+  try {
+    const { data: seekers } = await sb.from("seekers").select("contact, user_id").eq("category", jobCategory).limit(200);
+    if (!seekers || seekers.length === 0) return;
+    for (const s of seekers) {
+      if (s.user_id) sendPushToUser(s.user_id, "FWY: new match for you", `${employerName || "An employer"} posted a ${jobCategory} job: ${jobTitle}`);
+    }
+  } catch { /* best-effort, never block job posting */ }
 }
 async function notifyFollowersOfNewJob(employerId, employerName, jobTitle) {
   try {
@@ -4551,6 +4579,23 @@ async function reportToEido() {
   pushAdminTeam("FWY: new report", `${name} reported something via Eido.`);
   state.eidoThreads[ctx] = [...state.eidoThreads[ctx], { id: makeMsgId(), role: "assistant", text: "Thanks — I've sent this to the FWY team. They'll follow up if they need more details." }];
   render();
+}
+async function reportUnsafe(chatKey, otherName) {
+  const proceed = confirm(`This immediately alerts the FWY safety team, with your recent messages with ${otherName || "this person"}, so they can look into it. Continue?`);
+  if (!proceed) return;
+  const name = state.myProfile?.name || "Unknown user";
+  const contact = state.myProfile?.contact || state.myProfile?.email || "";
+  let transcript = "";
+  try {
+    const { data: msgs } = await sb.from("chat_messages").select("*").eq("chat_key", chatKey).order("created_at", { ascending: true });
+    transcript = (msgs || []).map(m => `${m.sender_role}: ${m.text || "[attachment]"}`).join("\n");
+  } catch { /* proceed even if transcript fetch fails */ }
+  try {
+    await sb.from("user_reports").insert({ reporter_name: name, reporter_contact: contact, transcript: `URGENT SAFETY REPORT — regarding: ${otherName || "unknown"}\nChat: ${chatKey}\n\n${transcript}`, urgent: true });
+  } catch { /* best-effort */ }
+  sendEmailNotification(state.settings.owner_notify_email, "🚨 URGENT: Safety report on FWY", `${name} (${contact || "no contact given"}) reported feeling unsafe regarding ${otherName || "another user"}.\n\nChat: ${chatKey}\n\n${transcript}`);
+  pushAdminTeam("🚨 URGENT: Safety report", `${name} reported feeling unsafe regarding ${otherName || "another user"}.`);
+  alert("We've alerted the FWY team — they review safety reports as a priority. If you're in immediate danger, please contact the police directly.");
 }
 async function changeTrial(delta) {
   const next = Math.max(0, (state.settings.trial_days ?? 3) + delta);
