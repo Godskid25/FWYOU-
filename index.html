@@ -218,6 +218,9 @@ const state = {
   voiceMsgProgress: {},
   showAdminTab: false,
   showLanding: false,
+  seekerStreak: 0,
+  seekerStreakNewBadge: null,
+  liteMode: false,
   newIncident: { what: "", affected: "", action: "", changed: "" },
   notifyForm: { emails: "", subject: "", message: "" },
   refundForm: { name: "", email: "", amount: "", reason: "" },
@@ -284,6 +287,15 @@ const state = {
 };
 
 function esc(s) { return (s || "").toString().replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
+function liteImg(url, style, icon) {
+  if (state.liteMode) return `<div style="${style};display:flex;align-items:center;justify-content:center;background:var(--stoneDark);color:var(--inkSoft);font-size:15px;flex-shrink:0;">${icon || "🖼"}</div>`;
+  return `<img src="${url}" style="${style}">`;
+}
+function toggleLiteMode() {
+  state.liteMode = !state.liteMode;
+  try { localStorage.setItem("fwy_lite_mode", state.liteMode ? "1" : "0"); } catch {}
+  render();
+}
 
 function mineVerifyBadge(mine) {
   const v = state.myVerification;
@@ -424,6 +436,7 @@ async function init() {
   if (!session) {
     try { state.showLanding = localStorage.getItem("fwy_landing_seen") !== "1"; } catch { state.showLanding = true; }
   }
+  try { state.liteMode = localStorage.getItem("fwy_lite_mode") === "1"; } catch {}
   state.loaded = true;
   render();
 }
@@ -460,6 +473,7 @@ async function loadMyProfiles() {
     state.myApplications = (invs || []).filter(r => r.initiated_by === "seeker");
     const { data: verif } = await sb.from("verifications").select("*").eq("user_id", uid).maybeSingle();
     state.myVerification = verif || null;
+    await checkInSeekerStreak(s);
   }
   if (e) {
     state.myProfile = e; state.employerStep = "candidates";
@@ -763,7 +777,7 @@ function renderSeeker() {
     <div class="statusbar"><span>9:41</span><span>FWY</span></div>
     <div class="header"><span class="title">Your profile</span></div>
     <div class="body">
-      ${state.myProfile?.photo_path ? `<div style="text-align:center;margin-bottom:12px;"><img src="${SUPABASE_URL}/storage/v1/object/public/profile-photos/${esc(state.myProfile.photo_path)}" style="width:76px;height:76px;border-radius:50%;object-fit:cover;border:1px solid var(--stoneDark);"></div>` : ""}
+      ${state.myProfile?.photo_path ? `<div style="text-align:center;margin-bottom:12px;">${liteImg(`${SUPABASE_URL}/storage/v1/object/public/profile-photos/${esc(state.myProfile.photo_path)}`, "width:76px;height:76px;border-radius:50%;object-fit:cover;border:1px solid var(--stoneDark);display:inline-flex;", "🙂")}</div>` : ""}
       <div class="field"><label>PHOTO (OPTIONAL)</label>
         <div class="file-wrap">
           <input type="file" id="sf_photo" accept="image/*">
@@ -796,6 +810,10 @@ function renderSeeker() {
         ${accessRemainingLine(state.myProfile.access_until)}
         <button data-action="shareReferralToWhatsApp" data-code="${esc(state.myProfile.referral_code||'')}" style="width:100%;margin-top:10px;border:1px solid var(--moss);background:none;border-radius:8px;padding:7px 10px;font-size:11.5px;color:var(--moss);cursor:pointer;">📤 Invite a friend</button>
       </div>`}
+      <div class="card" style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <div><div style="font-size:12px;font-weight:600;">Lite mode</div><div style="font-size:10.5px;color:var(--inkSoft);">Hide photos and videos to save data.</div></div>
+        <button data-action="toggleLiteMode" style="border:1px solid var(--stoneDark);background:${state.liteMode ? 'var(--moss)' : '#fff'};color:${state.liteMode ? '#fff' : 'var(--ink)'};border-radius:20px;padding:6px 14px;font-size:11px;cursor:pointer;flex-shrink:0;">${state.liteMode ? "On" : "Off"}</button>
+      </div>
       <button class="btn btn-moss" data-action="saveSeekerProfile">Save profile</button>
       <button class="btn-outline" style="margin-top:10px;" data-action="seekerGo" data-step="${state.myApplication ? 'teamChat' : 'teamApply'}">${state.myApplication ? 'Message admin about your application' : 'Or apply to work with FWY directly'}${state.myApplication ? unreadBadge(`apply:${state.myApplication.id}`) : ''}</button>
       <button class="btn-outline" style="margin-top:10px;" data-action="signOut">Log out</button>
@@ -827,7 +845,8 @@ function renderSeeker() {
     <div class="statusbar"><span>9:41</span><span>FWY</span></div>
     <div class="header"><span class="title">Matches for you</span></div>
     <div class="body">
-      <div style="margin-bottom:8px;"><span class="pill">${esc(mine?.category||"")}</span></div>
+      <div style="margin-bottom:8px;"><span class="pill">${esc(mine?.category||"")}</span>${state.seekerStreak >= 2 ? ` <span class="pill" style="border-color:var(--ember);color:var(--ember);">🔥 ${state.seekerStreak}-day streak</span>` : ""}</div>
+      ${state.seekerStreakNewBadge ? `<div style="background:rgba(191,107,31,.08);border:1px solid var(--ember);border-radius:10px;padding:9px 12px;margin-bottom:10px;font-size:12px;color:var(--ember);display:flex;justify-content:space-between;align-items:center;gap:8px;"><span>${esc(state.seekerStreakNewBadge)}</span><button data-action="dismissStreakBadge" style="border:none;background:none;color:var(--ember);cursor:pointer;font-size:14px;">✕</button></div>` : ""}
       <div class="hscroll-tabs">
           <button class="btn-outline" data-action="seekerGo" data-step="jobBoard">Job postings</button>
           <button class="btn-outline" data-action="seekerGo" data-step="myApplications">My applications${state.myApplications.length ? ` (${state.myApplications.length})` : ""}</button>
@@ -850,7 +869,7 @@ function renderSeeker() {
       ${state.aiMatchLoading ? `<div style="font-size:12.5px;color:var(--inkSoft);">Finding your best matches…</div>` : ""}
       ${state.aiMatchError ? `<div style="font-size:11px;color:var(--red);margin-bottom:10px;">${esc(state.aiMatchError)}</div>` : ""}
       ${!state.aiMatchLoading && list.length===0 ? `<div style="font-size:12.5px;color:var(--inkSoft);">No employers posted in your category yet.</div>` : ""}
-      ${!state.aiMatchLoading ? list.map(e => `<div class="card" style="display:flex;gap:10px;align-items:flex-start;"><div style="flex:1;">${e.logo_path ? `<img src="${SUPABASE_URL}/storage/v1/object/public/profile-photos/${esc(e.logo_path)}" style="width:38px;height:38px;border-radius:8px;object-fit:cover;float:left;margin-right:8px;">` : ""}<div class="card-title">${esc(e.name)}${e.verified ? `<span class="pill" style="border-color:var(--moss);color:var(--moss);font-size:10px;margin-left:6px;">✓ Verified</span>` : ""}${ratingBadge(e.id)}${topRatedBadge(e.id)}${followButton("employer", e.id)}</div><div class="card-sub">${esc(e.what_do)}</div>${e.aiReason ? `<div style="font-size:11px;color:var(--moss);margin-top:4px;">${esc(e.aiReason)}</div>` : ""}${e.id ? `<button class="btn-outline" style="margin-top:8px;color:var(--moss);clear:both;" data-action="startApply" data-id="${esc(e.id)}" data-name="${esc(e.name)}">Apply</button>` : ""}</div></div>`).join("") : ""}
+      ${!state.aiMatchLoading ? list.map(e => `<div class="card" style="display:flex;gap:10px;align-items:flex-start;"><div style="flex:1;">${e.logo_path ? liteImg(`${SUPABASE_URL}/storage/v1/object/public/profile-photos/${esc(e.logo_path)}`, "width:38px;height:38px;border-radius:8px;object-fit:cover;float:left;margin-right:8px;", "🏢") : ""}<div class="card-title">${esc(e.name)}${e.verified ? `<span class="pill" style="border-color:var(--moss);color:var(--moss);font-size:10px;margin-left:6px;">✓ Verified</span>` : ""}${ratingBadge(e.id)}${topRatedBadge(e.id)}${followButton("employer", e.id)}</div><div class="card-sub">${esc(e.what_do)}</div>${e.aiReason ? `<div style="font-size:11px;color:var(--moss);margin-top:4px;">${esc(e.aiReason)}</div>` : ""}${e.id ? `<button class="btn-outline" style="margin-top:8px;color:var(--moss);clear:both;" data-action="startApply" data-id="${esc(e.id)}" data-name="${esc(e.name)}">Apply</button>` : ""}</div></div>`).join("") : ""}
       <button class="btn-outline" style="margin-top:14px;" data-action="seekerGo" data-step="paymentBox">Payment Box</button>
       <button class="btn-outline" style="margin-top:10px;" data-action="seekerGo" data-step="${state.myApplication ? 'teamChat' : 'teamApply'}">${state.myApplication ? 'Message admin about your application' : 'Or apply to work with FWY directly'}${state.myApplication ? unreadBadge(`apply:${state.myApplication.id}`) : ''}</button>
       <button class="btn-outline" style="margin-top:10px;" data-action="signOut">Log out</button>
@@ -1144,7 +1163,7 @@ function renderEmployer() {
     <div class="statusbar"><span>9:41</span><span>FWY</span></div>
     <div class="header"><span class="title">Company profile</span></div>
     <div class="body">
-      ${state.myProfile?.logo_path ? `<div style="text-align:center;margin-bottom:12px;"><img src="${SUPABASE_URL}/storage/v1/object/public/profile-photos/${esc(state.myProfile.logo_path)}" style="width:76px;height:76px;border-radius:12px;object-fit:cover;border:1px solid var(--stoneDark);"></div>` : ""}
+      ${state.myProfile?.logo_path ? `<div style="text-align:center;margin-bottom:12px;">${liteImg(`${SUPABASE_URL}/storage/v1/object/public/profile-photos/${esc(state.myProfile.logo_path)}`, "width:76px;height:76px;border-radius:12px;object-fit:cover;border:1px solid var(--stoneDark);display:inline-flex;", "🏢")}</div>` : ""}
       <div class="field"><label>COMPANY LOGO (OPTIONAL)</label>
         <div class="file-wrap">
           <input type="file" id="ef_logo" accept="image/*">
@@ -1170,6 +1189,10 @@ function renderEmployer() {
         ${accessRemainingLine(state.myProfile.access_until)}
         <button data-action="shareReferralToWhatsApp" data-code="${esc(state.myProfile.referral_code||'')}" style="width:100%;margin-top:10px;border:1px solid var(--ember);background:none;border-radius:8px;padding:7px 10px;font-size:11.5px;color:var(--ember);cursor:pointer;">📤 Invite a friend</button>
       </div>`}
+      <div class="card" style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <div><div style="font-size:12px;font-weight:600;">Lite mode</div><div style="font-size:10.5px;color:var(--inkSoft);">Hide photos and videos to save data.</div></div>
+        <button data-action="toggleLiteMode" style="border:1px solid var(--stoneDark);background:${state.liteMode ? 'var(--ember)' : '#fff'};color:${state.liteMode ? '#fff' : 'var(--ink)'};border-radius:20px;padding:6px 14px;font-size:11px;cursor:pointer;flex-shrink:0;">${state.liteMode ? "On" : "Off"}</button>
+      </div>
       <button class="btn btn-ember" data-action="saveEmployerProfile">Save profile</button>
       <button class="btn-outline" style="margin-top:10px;color:var(--ember);" data-action="employerGo" data-step="${state.myServiceRequest ? 'serviceChat' : 'serviceRequest'}">${state.myServiceRequest ? 'Message admin about your service request' : 'Or request a service from us directly'}${state.myServiceRequest ? unreadBadge(`service:${state.myServiceRequest.id}`) : ''}</button>
       <button class="btn-outline" style="margin-top:10px;" data-action="signOut">Log out</button>
@@ -1223,7 +1246,7 @@ function renderEmployer() {
       ${state.aiMatchLoading ? `<div style="font-size:12.5px;color:var(--inkSoft);">Finding your best candidates…</div>` : ""}
       ${state.aiMatchError ? `<div style="font-size:11px;color:var(--red);margin-bottom:10px;">${esc(state.aiMatchError)}</div>` : ""}
       ${!state.aiMatchLoading && list.length===0 ? `<div style="font-size:12.5px;color:var(--inkSoft);">No candidates yet.</div>` : ""}
-      ${!state.aiMatchLoading ? list.map(s => `<div class="card">${s.photo_path ? `<img src="${SUPABASE_URL}/storage/v1/object/public/profile-photos/${esc(s.photo_path)}" style="width:38px;height:38px;border-radius:50%;object-fit:cover;float:left;margin-right:8px;">` : ""}<div class="card-title">${esc(s.name)}${s.verified ? `<span class="pill" style="border-color:var(--moss);color:var(--moss);font-size:10px;margin-left:6px;">✓ Verified ID</span>` : ""}${ratingBadge(s.id)}${topRatedBadge(s.id)}${followButton("seeker", s.id)}</div><div class="card-sub">${esc(s.profession)} · ${esc(s.qualifications||"—")}</div>${s.aiReason ? `<div style="font-size:11px;color:var(--ember);margin-top:4px;">${esc(s.aiReason)}</div>` : ""}<button class="btn-outline" style="margin-top:8px;color:var(--ember);clear:both;" data-action="startInvite" data-id="${esc(s.id)}" data-name="${esc(s.name)}">Invite / Message</button></div>`).join("") : ""}
+      ${!state.aiMatchLoading ? list.map(s => `<div class="card">${s.photo_path ? liteImg(`${SUPABASE_URL}/storage/v1/object/public/profile-photos/${esc(s.photo_path)}`, "width:38px;height:38px;border-radius:50%;object-fit:cover;float:left;margin-right:8px;", "🙂") : ""}<div class="card-title">${esc(s.name)}${s.verified ? `<span class="pill" style="border-color:var(--moss);color:var(--moss);font-size:10px;margin-left:6px;">✓ Verified ID</span>` : ""}${ratingBadge(s.id)}${topRatedBadge(s.id)}${followButton("seeker", s.id)}</div><div class="card-sub">${esc(s.profession)} · ${esc(s.qualifications||"—")}</div>${s.aiReason ? `<div style="font-size:11px;color:var(--ember);margin-top:4px;">${esc(s.aiReason)}</div>` : ""}<button class="btn-outline" style="margin-top:8px;color:var(--ember);clear:both;" data-action="startInvite" data-id="${esc(s.id)}" data-name="${esc(s.name)}">Invite / Message</button></div>`).join("") : ""}
       <button class="btn-outline" style="margin-top:14px;color:var(--ember);" data-action="employerGo" data-step="paymentBox">Payment Box</button>
       <button class="btn-outline" style="margin-top:10px;color:var(--ember);" data-action="employerGo" data-step="${state.myServiceRequest ? 'serviceChat' : 'serviceRequest'}">${state.myServiceRequest ? 'Message admin about your service request' : 'Or request a service from us directly'}${state.myServiceRequest ? unreadBadge(`service:${state.myServiceRequest.id}`) : ''}</button>
       <button class="btn-outline" style="margin-top:10px;" data-action="signOut">Log out</button>
@@ -2234,6 +2257,8 @@ async function onAction(e) {
     case "sendEido": await sendEido(); break;
     case "reportToEido": await reportToEido(); break;
     case "reportUnsafe": await reportUnsafe(el.dataset.chatkey, el.dataset.othername); break;
+    case "dismissStreakBadge": state.seekerStreakNewBadge = null; render(); break;
+    case "toggleLiteMode": toggleLiteMode(); break;
     case "pickEidoAttachment": document.getElementById("eidoFileInput")?.click(); break;
     case "clearEidoAttachment": state.eidoPendingAttachment = null; render(); break;
     case "deleteEidoMsg": {
@@ -2943,8 +2968,8 @@ function jobBoardResultsHtml() {
   <div class="card" style="margin-bottom:10px;">
     <div class="card-title">${esc(p.title)}</div>
     <div class="card-sub">${esc((p.employers && p.employers.name) || "")}${p.department ? " · " + esc(p.department) : ""}${p.location ? " · " + esc(p.location) : ""}${p.pay ? " · " + esc(p.pay) : ""}</div>
-    ${p.poster_path ? `<img src="${SUPABASE_URL}/storage/v1/object/public/chat-attachments/${esc(p.poster_path)}" style="max-width:100%;border-radius:8px;margin:8px 0;">` : ""}
-    ${p.video_path ? `<video src="${SUPABASE_URL}/storage/v1/object/public/chat-attachments/${esc(p.video_path)}" controls style="max-width:100%;border-radius:8px;margin:8px 0;"></video>` : ""}
+    ${p.poster_path ? (state.liteMode ? `<div style="font-size:11px;color:var(--inkSoft);margin:6px 0;">📷 Photo attached (hidden in lite mode)</div>` : `<img src="${SUPABASE_URL}/storage/v1/object/public/chat-attachments/${esc(p.poster_path)}" style="max-width:100%;border-radius:8px;margin:8px 0;">`) : ""}
+    ${p.video_path ? (state.liteMode ? `<div style="font-size:11px;color:var(--inkSoft);margin:6px 0;">🎥 Video attached (hidden in lite mode)</div>` : `<video src="${SUPABASE_URL}/storage/v1/object/public/chat-attachments/${esc(p.video_path)}" controls style="max-width:100%;border-radius:8px;margin:8px 0;"></video>`) : ""}
     ${p.description ? `<div style="font-size:12px;color:var(--inkSoft);margin:8px 0;">${esc((p.description||"").slice(0,180))}${(p.description||"").length > 180 ? "…" : ""}</div>` : ""}
     <div style="display:flex;gap:8px;">
       <button class="btn-outline" style="color:var(--moss);" data-action="startApplyJob" data-id="${p.id}">Apply</button>
@@ -3402,6 +3427,29 @@ function paydayBadges(logs, isFirst, beatBaseline) {
   if (beatBaseline) badges.push("📈 Beat your baseline");
   if (logs.length >= 10) badges.push("💪 10 Paydays Logged");
   return badges;
+}
+const STREAK_MILESTONES = [{ days: 3, reward: 2, level: 1 }, { days: 7, reward: 5, level: 2 }, { days: 30, reward: 14, level: 3 }];
+async function checkInSeekerStreak(seeker) {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    await sb.from("seeker_activity_log").insert({ seeker_id: seeker.id, activity_date: today }); // ignored if already logged today (unique constraint)
+    const { data: logs } = await sb.from("seeker_activity_log").select("activity_date").eq("seeker_id", seeker.id);
+    const dateSet = new Set((logs || []).map(l => l.activity_date));
+    let streak = 0;
+    let d = new Date();
+    if (!dateSet.has(d.toISOString().slice(0, 10))) d.setDate(d.getDate() - 1);
+    while (dateSet.has(d.toISOString().slice(0, 10))) { streak++; d.setDate(d.getDate() - 1); }
+    state.seekerStreak = streak;
+    const currentLevel = seeker.streak_reward_level || 0;
+    const milestone = STREAK_MILESTONES.find(m => streak >= m.days && currentLevel < m.level);
+    if (milestone) {
+      await sb.from("seekers").update({ streak_reward_level: milestone.level, access_until: extendAccess(seeker.access_until, milestone.reward) }).eq("id", seeker.id);
+      state.myProfile = { ...state.myProfile, streak_reward_level: milestone.level, access_until: extendAccess(seeker.access_until, milestone.reward) };
+      state.seekerStreakNewBadge = `🔥 ${milestone.days}-day streak! You earned ${milestone.reward} free days.`;
+      const contact = seeker.contact;
+      if (contact) sendEmailNotification(contact, "FWY: streak reward!", `You've checked FWY for ${milestone.days} days in a row — enjoy ${milestone.reward} free days of access!`);
+    }
+  } catch { /* best-effort, never block loading matches */ }
 }
 async function calculatePay() {
   const uid = currentAuthId();
