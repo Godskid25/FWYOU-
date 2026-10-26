@@ -142,6 +142,14 @@ function chatBubbleContent(m) {
 }
 const SUPABASE_KEY = "sb_publishable_-PAtGbuLx4sAjJSNuAa01A_T-jB7eYt";
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+sb.auth.onAuthStateChange((event, session) => {
+  if (event === "PASSWORD_RECOVERY") {
+    state.session = session;
+    state.showSetNewPassword = true;
+    state.showLanding = false;
+    render();
+  }
+});
 const EMAIL_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/send-email-`;
 const PUSH_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/send-push`;
 const AI_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/ai-chat`;
@@ -221,6 +229,16 @@ const state = {
   seekerStreak: 0,
   seekerStreakNewBadge: null,
   liteMode: false,
+  showForgotPassword: false,
+  forgotPasswordEmail: "",
+  forgotPasswordSent: false,
+  forgotPasswordError: "",
+  forgotPasswordLoading: false,
+  showSetNewPassword: false,
+  newPassword: "",
+  newPasswordError: "",
+  newPasswordLoading: false,
+  newPasswordDone: false,
   newIncident: { what: "", affected: "", action: "", changed: "" },
   notifyForm: { emails: "", subject: "", message: "" },
   refundForm: { name: "", email: "", amount: "", reason: "" },
@@ -294,6 +312,38 @@ function liteImg(url, style, icon) {
 function toggleLiteMode() {
   state.liteMode = !state.liteMode;
   try { localStorage.setItem("fwy_lite_mode", state.liteMode ? "1" : "0"); } catch {}
+  render();
+}
+async function sendPasswordReset() {
+  const email = (state.forgotPasswordEmail || "").trim();
+  if (!email) { state.forgotPasswordError = "Enter your email first."; render(); return; }
+  state.forgotPasswordLoading = true;
+  state.forgotPasswordError = "";
+  render();
+  try {
+    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + window.location.pathname });
+    if (error) { state.forgotPasswordError = error.message; }
+    else { state.forgotPasswordSent = true; }
+  } catch (err) {
+    state.forgotPasswordError = "Couldn't send the reset email — check your connection and try again.";
+  }
+  state.forgotPasswordLoading = false;
+  render();
+}
+async function submitNewPassword() {
+  const pw = state.newPassword || "";
+  if (pw.length < 6) { state.newPasswordError = "Password must be at least 6 characters."; render(); return; }
+  state.newPasswordLoading = true;
+  state.newPasswordError = "";
+  render();
+  try {
+    const { error } = await sb.auth.updateUser({ password: pw });
+    if (error) { state.newPasswordError = error.message; }
+    else { state.newPasswordDone = true; }
+  } catch (err) {
+    state.newPasswordError = "Couldn't update your password — check your connection and try again.";
+  }
+  state.newPasswordLoading = false;
   render();
 }
 
@@ -505,6 +555,8 @@ async function loadMyProfiles() {
 function render() {
   const el = document.getElementById("screen");
   if (!state.loaded) { el.innerHTML = '<div class="loading">Loading…</div>'; return; }
+  if (state.showSetNewPassword) { el.innerHTML = renderSetNewPassword(); attachHandlers(); return; }
+  if (state.showForgotPassword) { el.innerHTML = renderForgotPassword(); attachHandlers(); return; }
   if (state.showLanding) { el.innerHTML = renderLandingPage(); attachHandlers(); return; }
   if (state.showTerms) { el.innerHTML = renderTermsViewer(); attachHandlers(); return; }
   if (state.eidoOpen) { el.innerHTML = renderEidoChat(); attachHandlers(); return; }
@@ -514,6 +566,38 @@ function render() {
   else inner = renderAdmin();
   el.innerHTML = inner + renderBottomTabs() + renderOnboarding() + renderHelpButton() + renderHelpPanel();
   attachHandlers();
+}
+function renderForgotPassword() {
+  return `
+    <div class="statusbar"><span>9:41</span><span>FWY</span></div>
+    <div class="header"><button class="back" data-action="closeForgotPassword">‹</button><span class="title">Reset password</span></div>
+    <div class="body">
+      ${state.forgotPasswordSent ? `
+        <div style="font-size:13px;line-height:1.6;margin-bottom:16px;">We've sent a password reset link to <b>${esc(state.forgotPasswordEmail)}</b>. Open it on this device to set a new password.</div>
+        <button class="btn btn-ink" data-action="closeForgotPassword">Back to login</button>
+      ` : `
+        <div style="font-size:12px;color:var(--inkSoft);margin-bottom:16px;">Enter the email on your account — we'll send you a link to set a new password.</div>
+        <div class="field"><label>EMAIL</label><input id="forgot_email" value="${esc(state.forgotPasswordEmail)}" placeholder="you@email.com"></div>
+        ${state.forgotPasswordError ? `<div class="err">${esc(state.forgotPasswordError)}</div>` : ""}
+        <button class="btn btn-ink" data-action="sendPasswordReset" ${state.forgotPasswordLoading ? "disabled" : ""}>${state.forgotPasswordLoading ? "Sending…" : "Send reset link"}</button>
+      `}
+    </div>`;
+}
+function renderSetNewPassword() {
+  return `
+    <div class="statusbar"><span>9:41</span><span>FWY</span></div>
+    <div class="header"><span class="title">Set a new password</span></div>
+    <div class="body">
+      ${state.newPasswordDone ? `
+        <div style="font-size:13px;line-height:1.6;margin-bottom:16px;">Your password has been updated. You're all set.</div>
+        <button class="btn btn-ink" data-action="closeSetNewPassword">Continue to FWY</button>
+      ` : `
+        <div style="font-size:12px;color:var(--inkSoft);margin-bottom:16px;">Choose a new password for your account.</div>
+        <div class="field"><label>NEW PASSWORD</label><input id="new_password" type="password" value="${esc(state.newPassword)}" placeholder="At least 6 characters"></div>
+        ${state.newPasswordError ? `<div class="err">${esc(state.newPasswordError)}</div>` : ""}
+        <button class="btn btn-ink" data-action="submitNewPassword" ${state.newPasswordLoading ? "disabled" : ""}>${state.newPasswordLoading ? "Saving…" : "Save new password"}</button>
+      `}
+    </div>`;
 }
 function renderLandingPage() {
   return `
@@ -750,6 +834,7 @@ function authScreen(role, accent) {
     <button class="btn" style="background:${accent};margin-bottom:14px;" data-action="${isSignup ? 'signUp' : 'signIn'}" data-role="${role}" ${state.authLoading?'disabled':''}>
       ${state.authLoading ? "…" : (isSignup ? "Create account" : "Log in")}
     </button>
+    ${!isSignup ? `<div style="text-align:center;margin-bottom:6px;"><button data-action="openForgotPassword" style="border:none;background:none;color:var(--inkSoft);font-size:12px;cursor:pointer;text-decoration:underline;">Forgot password?</button></div>` : ""}
     ${isAdmin ? "" : `
     <div style="text-align:center;">
       <button data-action="toggleAuthMode" style="border:none;background:none;color:var(--inkSoft);font-size:12.5px;cursor:pointer;text-decoration:underline;">
@@ -2053,6 +2138,8 @@ async function onAction(e) {
   const action = el.dataset.action;
 
   readField("auth_email", state.authForm, "email");
+  readField("forgot_email", state, "forgotPasswordEmail");
+  readField("new_password", state, "newPassword");
   readField("hf_name", state.helperForm, "name");
   readField("hf_email", state.helperForm, "email");
   readField("hf_password", state.helperForm, "password");
@@ -2259,6 +2346,23 @@ async function onAction(e) {
     case "reportUnsafe": await reportUnsafe(el.dataset.chatkey, el.dataset.othername); break;
     case "dismissStreakBadge": state.seekerStreakNewBadge = null; render(); break;
     case "toggleLiteMode": toggleLiteMode(); break;
+    case "openForgotPassword":
+      state.forgotPasswordEmail = state.authForm.email || "";
+      state.forgotPasswordError = "";
+      state.forgotPasswordSent = false;
+      state.showForgotPassword = true;
+      render();
+      break;
+    case "closeForgotPassword": state.showForgotPassword = false; render(); break;
+    case "sendPasswordReset": await sendPasswordReset(); break;
+    case "closeSetNewPassword":
+      state.showSetNewPassword = false;
+      state.newPassword = "";
+      state.newPasswordDone = false;
+      if (state.session) await loadMyProfiles();
+      render();
+      break;
+    case "submitNewPassword": await submitNewPassword(); break;
     case "pickEidoAttachment": document.getElementById("eidoFileInput")?.click(); break;
     case "clearEidoAttachment": state.eidoPendingAttachment = null; render(); break;
     case "deleteEidoMsg": {
@@ -4491,7 +4595,10 @@ function eidoPublicSystemPrompt() {
   const role = state.tab === "employer" ? "employer" : "seeker";
   const helpText = (HELP_CONTENT[role] || []).map(s => `${s.h}: ${s.b}`).join("\n");
   return "You are Eido, the friendly help assistant for FWYOU (FWY), a job marketplace app in Zimbabwe connecting job seekers and employers. " +
-    "Always reply in the same language the person writes in — Shona, Ndebele, Swahili, Portuguese, French, English, or any other African language — matching their language naturally, without commenting on the fact that you're doing so. " +
+    "CRITICAL LANGUAGE RULE, follow this exactly: detect the language of the person's MOST RECENT message and write your ENTIRE reply in that same language. " +
+    "If they write in Shona, your whole reply must be in Shona — do not switch to English partway, do not translate back to English, do not add an English summary. The same applies for Ndebele, Swahili, Portuguese, French, or any other language — always match their most recent message, word for word in that language, with no mixing. " +
+    "Example: if the person writes \"Mhoro, ndingawanepi basa?\", you must reply entirely in Shona, something like \"Mhoro! Unogona kutsvaga mabasa pa...\" — never in English. " +
+    "Do not comment on the fact that you're doing this, just do it naturally, every single reply. " +
     "Here is everything you are allowed to know about how the app works, and the ONLY thing you should base your answers on:\n\n" + helpText + "\n\n" +
     "Rules you must always follow: " +
     "1) You only help with how to use FWY — navigation, features, fees the person can already see in the app, verification, chat, and calls. " +
@@ -4563,7 +4670,7 @@ async function eidoSendMessage(text, attachment) {
     .then(({ data }) => { if (data) userMsg.id = data.id; });
   try {
     const sys = ctx === "admin"
-      ? `You are Eido, FWY's assistant for admin staff. Help them troubleshoot problems and answer questions about running FWY. [Context: current books: ${booksSummary()}]`
+      ? `You are Eido, FWY's assistant for admin staff. Help them troubleshoot problems and answer questions about running FWY. CRITICAL: detect the language of their most recent message and reply entirely in that same language — Shona, Ndebele, or whatever they used, with no mixing back to English. [Context: current books: ${booksSummary()}]`
       : eidoPublicSystemPrompt();
     let messageForAI = text || "";
     if (attachment?.fileName && !attachment.imageData) {
